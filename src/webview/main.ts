@@ -478,11 +478,14 @@ function renderHistory(): void {
 			let bodyAttrs = "";
 			if (shouldCollapse) {
 				bodyInner = previewHtml;
-				bodyClass = "history-item-body is-collapsed";
+				bodyClass =
+					item.role === "assistant"
+						? "history-item-body reply-content--md is-collapsed"
+						: "history-item-body is-collapsed";
 				bodyAttrs = ` data-history-index="${i}" data-lazy="${item.role}"`;
 			} else if (item.role === "assistant") {
 				bodyInner = markdownToSafeHtml(item.content);
-				bodyClass = "history-item-body";
+				bodyClass = "history-item-body reply-content--md";
 			} else {
 				bodyInner = esc(item.content).replace(/\n/g, "<br>");
 				bodyClass = "history-item-body";
@@ -543,8 +546,10 @@ historyList.addEventListener("click", (ev) => {
 				const entry = historyEntries[idx];
 				if (entry.role === "assistant" && lazy === "assistant") {
 					body.innerHTML = markdownToSafeHtml(entry.content);
+					body.classList.add("reply-content--md");
 				} else if (entry.role === "user" && lazy === "user") {
 					body.innerHTML = esc(entry.content).replace(/\n/g, "<br>");
+					body.classList.remove("reply-content--md");
 				}
 				body.removeAttribute("data-lazy");
 				body.removeAttribute("data-history-index");
