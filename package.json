@@ -2,7 +2,7 @@
 	"name": "mcp-cursor-message",
 	"displayName": "mcp-cursor-message",
 	"description": "MCP 旁路對話：側欄佇列、check_messages / ask_question；與 Cursor 整合。",
-	"version": "9.0.0",
+	"version": "9.1.0",
 	"author": "911218sky",
 	"publisher": "local",
 	"repository": {
