@@ -621,6 +621,7 @@ window.addEventListener("message", (ev) => {
 	const raw = ev.data as { type?: string };
 	if (raw.type !== "state") return;
 	const m = raw as ExtensionPanelStateMessage;
+	const prevLastSeenReplyContent = lastSeenReplyContent;
 	historyEntries = normalizeHistoryPayload(m.history ?? []);
 	if (historyEntries.length === 0) {
 		tryMigrateHistoryFromLocalStorage();
@@ -632,7 +633,7 @@ window.addEventListener("message", (ev) => {
 	renderQuestion((m.question as QuestionPayload | null) ?? null);
 	renderReply(m.reply?.content);
 	const incomingReply = (m.reply?.content ?? "").trim();
-	if (incomingReply && incomingReply !== lastSeenReplyContent) {
+	if (incomingReply && incomingReply !== prevLastSeenReplyContent) {
 		const last = historyEntries[historyEntries.length - 1];
 		if (!last || last.role !== "assistant" || last.content !== incomingReply) {
 			appendHistory("assistant", incomingReply);
@@ -793,7 +794,6 @@ btnToggleReply.addEventListener("click", () => {
 
 btnClearHistory.addEventListener("click", () => {
 	historyEntries = [];
-	lastSeenReplyContent = "";
 	persistHistory();
 	renderHistory();
 });
