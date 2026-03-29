@@ -4,15 +4,47 @@ name: Package VSIX
 on:
   push:
     branches: [main]
-    tags:
-      - "v*"
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
   release:
     types: [published]
 
 jobs:
+  auto_release:
+    # Push to main -> auto bump patch version, create tag, then push.
+    # The tag push will trigger another run to package and publish VSIX.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bump patch version and push tag
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          NEXT_VERSION="$(node -e "const fs=require('fs'); const p='./package.json'; const pkg=JSON.parse(fs.readFileSync(p,'utf8')); const [ma,mi,pa]=pkg.version.split('.').map(Number); const next=`${ma}.${mi}.${pa+1}`; pkg.version=next; fs.writeFileSync(p, JSON.stringify(pkg, null, '\t')+'\\n'); process.stdout.write(next);")"
+
+          git add package.json
+          git commit -m "chore(release): v$NEXT_VERSION"
+          git tag "v$NEXT_VERSION"
+          git push origin HEAD:main --follow-tags
+
   package:
+    # For push events, package only for v* tags.
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     # `contents: write` is required to upload release assets. Do not use `${{ }}` in `permissions` (breaks workflow parsing).
     permissions:
