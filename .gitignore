@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+
+# VSIX / local packages
+*.vsix
+
+# Logs & diagnostics
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test / coverage
+coverage/
+.nyc_output/
+.vscode-test/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Cursor / local workspace tooling
+.cursor/
+
+# Editor (uncomment if you prefer not to commit personal workspace settings)
+# .vscode/*
+# !.vscode/extensions.json
+# !.vscode/settings.json.example

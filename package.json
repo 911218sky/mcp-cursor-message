@@ -1,0 +1,83 @@
+{
+	"name": "mcp-cursor-message",
+	"displayName": "mcp-cursor-message",
+	"description": "MCP 旁路對話：側欄佇列、check_messages / ask_question；與 Cursor 整合。",
+	"version": "9.0.0",
+	"author": "911218sky",
+	"publisher": "local",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/911218sky/mcp-cursor-message.git"
+	},
+	"license": "AGPL-3.0-only",
+	"packageManager": "bun@1.2.17",
+	"engines": {
+		"vscode": "^1.105.0"
+	},
+	"categories": ["Other"],
+	"activationEvents": ["onStartupFinished"],
+	"main": "./dist/extension.js",
+	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "mcpMessenger",
+					"title": "MCP 對話",
+					"icon": "media/icon.svg"
+				}
+			]
+		},
+		"views": {
+			"mcpMessenger": [
+				{
+					"type": "webview",
+					"id": "mcpMessenger.mainView",
+					"name": "訊息與佇列"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "mcpMessenger.setupMcp",
+				"title": "mcp-cursor-message: 安裝 MCP 設定"
+			},
+			{
+				"command": "mcpMessenger.removeMcp",
+				"title": "mcp-cursor-message: 卸載 MCP 設定"
+			},
+			{
+				"command": "mcpMessenger.sendFile",
+				"title": "mcp-cursor-message: 傳送檔案到輸入框"
+			},
+			{
+				"command": "mcpMessenger.resetTokenStats",
+				"title": "mcp-cursor-message: 重設 token 統計（約略）"
+			}
+		],
+		"menus": {
+			"explorer/context": [
+				{
+					"command": "mcpMessenger.sendFile",
+					"group": "navigation@100"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile:mcp": "node esbuild.config.mjs mcp",
+		"compile:ext": "node esbuild.config.mjs ext",
+		"compile": "node esbuild.config.mjs all",
+		"package": "bun run compile && bunx @vscode/vsce package --no-dependencies --allow-missing-repository"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.28.0",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@types/node": "^25.5.0",
+		"@types/vscode": "^1.105.0",
+		"@vscode/vsce": "^3.7.1",
+		"esbuild": "^0.27.4",
+		"typescript": "^6.0.2"
+	}
+}

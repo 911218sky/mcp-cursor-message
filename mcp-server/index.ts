@@ -1,0 +1,626 @@
+/**
+ * MCP stdio 進入點（單檔：配置、佇列、工具註冊皆於此檔）。
+ * Cursor 以子程序啟動本檔，經 stdin/stdout 與主程式通訊；與 VS Code 擴充透過
+ * `MESSENGER_DATA_DIR` 下之 JSON 檔協作，無直接 socket 連線。
+ */
+import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import { z } from "zod";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
+
+// --- 型別 -----------------------------------------------------------------
+
+/** 擴充功能寫入 queue.json 的單則訊息。 */
+type QueueMsg =
+	| { type: "text"; content?: string }
+	| { type: "image"; path?: string; caption?: string }
+	| { type: "file"; path?: string; suffix?: string };
+
+/** MCP 工具回傳給模型的文字片段。 */
+type TextPart = { type: "text"; text: string };
+/** 圖片以 base64 一併送入模型上下文。 */
+type ImagePart = { type: "image"; data: string; mimeType: string };
+type ContentPart = TextPart | ImagePart;
+
+/** ask_question 收到 answer.json 時，每一題的作答。 */
+type AnswerEntry = {
+	questionId?: string;
+	selected?: string[];
+	other?: string;
+};
+
+// --- 路徑與常數 -----------------------------------------------------------
+
+/** 所有 IPC 檔案目錄；須與擴充功能使用的 MESSENGER_DATA_DIR 相同。 */
+const DATA_DIR =
+	process.env.MESSENGER_DATA_DIR ?? path.join(os.homedir(), ".moyu-message");
+
+const QUEUE_FILE = path.join(DATA_DIR, "queue.json");
+const QUESTION_FILE = path.join(DATA_DIR, "question.json");
+const ANSWER_FILE = path.join(DATA_DIR, "answer.json");
+const REPLY_FILE = path.join(DATA_DIR, "reply.json");
+const LOG_FILE = path.join(DATA_DIR, "server.log");
+
+/** 輪詢 queue / answer 的間隔（毫秒）。 */
+const POLL_INTERVAL = 100;
+
+const HEARTBEAT_INTERVAL =
+	Number(process.env.MESSENGER_HEARTBEAT_INTERVAL_MS) || 8000;
+
+const MAX_WAIT_MS = Number(process.env.MESSENGER_MAX_WAIT_MS) || 120000;
+
+/** MCP 協議註冊名稱、`.cursor/mcp.json` 鍵名、logging；須與擴充 `mcp-config.ts` 的 `SERVER_KEY` 一致。 */
+const MCP_DISPLAY_NAME = "mcp-cursor-message";
+
+/**
+ * 加在送給 AI 的最後一段文字後，提醒模型回合未結束、需再呼叫 check_messages。
+ */
+const SYSTEM_SUFFIX =
+	`\n\n---\n[system] 以上是使用者透過外掛傳送的對話內容。回覆完成後請呼叫 MCP 伺服器「${MCP_DISPLAY_NAME}」的 check_messages 工具繼續監聽新訊息。`;
+
+const MCP_SERVER_INFO = {
+	name: MCP_DISPLAY_NAME,
+	version: "1.0.0",
+} as const;
+
+// --- Zod（ask_question） --------------------------------------------------
+
+const questionOptionSchema = z.object({
+	id: z.string().describe("選項 ID"),
+	label: z.string().describe("選項顯示文字"),
+});
+
+const questionItemSchema = z.object({
+	question: z.string().describe("問題文字"),
+	options: z.array(questionOptionSchema).describe("選項列表"),
+	allow_multiple: z.boolean().default(false).describe("是否允許多選"),
+});
+
+// --- 佇列與訊息轉換 -------------------------------------------------------
+
+/** 建立 IPC 目錄（與擴充寫入路徑須一致）。 */
+async function ensureDataDir(): Promise<void> {
+	await fs.mkdir(DATA_DIR, { recursive: true });
+}
+
+/** 讀取待處理佇列；供 `check_messages` 輪詢。 */
+async function readQueue(): Promise<QueueMsg[]> {
+	try {
+		const raw = await fs.readFile(QUEUE_FILE, "utf-8");
+		const data = JSON.parse(raw) as unknown;
+		return Array.isArray(data) ? (data as QueueMsg[]) : [];
+	} catch {
+		return [];
+	}
+}
+
+/** 佇列成功送進模型上下文後清空，避免重複處理。 */
+async function clearQueue(): Promise<void> {
+	await fs.writeFile(QUEUE_FILE, "[]", "utf-8");
+}
+
+/**
+ * 可被取消的延遲；若 `signal` 已 abort 則立即結束輪詢迴圈。
+ * 回傳 `true` 表示時間到，`false` 表示已中止。
+ */
+async function sleepWithAbort(
+	signal: AbortSignal,
+	ms: number
+): Promise<boolean> {
+	if (signal.aborted) return false;
+	return new Promise((resolve) => {
+		const timeout = setTimeout(finish, ms, true);
+		const onAbort = () => finish(false);
+		function finish(result: boolean) {
+			clearTimeout(timeout);
+			signal.removeEventListener("abort", onAbort);
+			resolve(result);
+		}
+		signal.addEventListener("abort", onAbort, { once: true });
+	});
+}
+
+/** 副檔名對應 MIME，供圖片訊息內嵌。 */
+const MIME_MAP: Record<string, string> = {
+	".png": "image/png",
+	".jpg": "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif": "image/gif",
+	".webp": "image/webp",
+	".svg": "image/svg+xml",
+	".bmp": "image/bmp",
+};
+
+/** 檔案大小人類可讀字串（用於 `file` 類訊息摘要）。 */
+function formatSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** 視為可內嵌讀取全文之副檔名（仍受大小上限保護）。 */
+const TEXT_EXTS = new Set([
+	".txt",
+	".md",
+	".json",
+	".js",
+	".ts",
+	".jsx",
+	".tsx",
+	".py",
+	".java",
+	".c",
+	".cpp",
+	".h",
+	".css",
+	".html",
+	".xml",
+	".yaml",
+	".yml",
+	".toml",
+	".ini",
+	".cfg",
+	".sh",
+	".bat",
+	".ps1",
+	".log",
+	".csv",
+	".sql",
+	".rs",
+	".go",
+	".rb",
+	".php",
+	".vue",
+	".svelte",
+]);
+
+/** 純文字佇列項轉為模型 content。 */
+async function processTextMessage(
+	msg: Extract<QueueMsg, { type: "text" }>
+): Promise<ContentPart> {
+	return { type: "text", text: msg.content ?? "" };
+}
+
+/** 讀取圖片檔為 base64，可選前置說明文字。 */
+async function processImageMessage(
+	msg: Extract<QueueMsg, { type: "image" }>
+): Promise<ContentPart | ContentPart[]> {
+	const filePath = msg.path;
+	if (!filePath) {
+		return { type: "text", text: "[圖片訊息：路徑為空]" };
+	}
+	try {
+		const buf = await fs.readFile(filePath);
+		const ext = path.extname(filePath).toLowerCase();
+		const mime = MIME_MAP[ext] ?? "application/octet-stream";
+		const base64 = buf.toString("base64");
+		const result: ContentPart[] = [];
+		if (msg.caption) {
+			result.push({ type: "text", text: msg.caption });
+		}
+		result.push({ type: "image", data: base64, mimeType: mime });
+		return result.length === 1 ? result[0]! : result;
+	} catch {
+		return { type: "text", text: `[圖片讀取失敗: ${filePath}]` };
+	}
+}
+
+/** 檔案路徑摘要；小於閾值之文字類檔可內嵌於 code fence。 */
+async function processFileMessage(
+	msg: Extract<QueueMsg, { type: "file" }>
+): Promise<ContentPart> {
+	const filePath = msg.path;
+	if (!filePath) {
+		return { type: "text", text: "[檔案訊息：路徑為空]" };
+	}
+	try {
+		const stat = await fs.stat(filePath);
+		const ext = path.extname(filePath).toLowerCase();
+		let text = `[檔案: ${path.basename(filePath)}] (${formatSize(stat.size)})\n路徑: ${filePath}\n`;
+		if (TEXT_EXTS.has(ext) && stat.size < 512 * 1024) {
+			const content = await fs.readFile(filePath, "utf-8");
+			text += "```\n" + content + "\n```";
+		} else {
+			text += "(二進位檔案，已略過內容)";
+		}
+		if (msg.suffix) text += "\n" + msg.suffix;
+		return { type: "text", text };
+	} catch {
+		return { type: "text", text: `[檔案讀取失敗: ${filePath}]` };
+	}
+}
+
+/** 將單則佇列訊息轉為一或多段 MCP content。 */
+async function processMessage(
+	msg: QueueMsg
+): Promise<ContentPart | ContentPart[]> {
+	switch (msg.type) {
+		case "text":
+			return processTextMessage(msg);
+		case "image":
+			return processImageMessage(msg);
+		case "file":
+			return processFileMessage(msg);
+		default:
+			return {
+				type: "text",
+				text: `[未知訊息類型: ${(msg as { type: string }).type}]`,
+			};
+	}
+}
+
+// --- 日誌 -----------------------------------------------------------------
+
+/** 追加一行至 `server.log`（除錯與追蹤工具呼叫）。 */
+async function appendServerLog(level: string, message: string): Promise<void> {
+	try {
+		await ensureDataDir();
+		await fs.appendFile(
+			LOG_FILE,
+			`[${new Date().toISOString()}] [${level}] ${message}\n`,
+			"utf-8"
+		);
+	} catch {
+		/* 忽略寫入失敗 */
+	}
+}
+
+// --- 長等待心跳 -----------------------------------------------------------
+
+type ToolExtra = RequestHandlerExtra<never, ServerNotification>;
+
+/**
+ * 長時間等待時通知客戶端（優先 MCP progress，否則 logging），
+ * 避免使用者以為工具當機。
+ */
+async function emitHeartbeat(
+	mcpServer: McpServer,
+	extra: ToolExtra,
+	message: string
+): Promise<void> {
+	if (extra.signal.aborted) return;
+	const progressToken = extra._meta?.progressToken;
+	if (progressToken !== undefined) {
+		try {
+			await extra.sendNotification({
+				method: "notifications/progress",
+				params: {
+					progressToken,
+					progress: Date.now(),
+					message,
+				},
+			} as ServerNotification);
+			return;
+		} catch {
+			/* 改試 logging */
+		}
+	}
+	try {
+		await mcpServer.sendLoggingMessage(
+			{
+				level: "info",
+				logger: MCP_DISPLAY_NAME,
+				data: message,
+			},
+			extra.sessionId
+		);
+	} catch {
+		/* 忽略 */
+	}
+}
+
+// --- 工具註冊 -------------------------------------------------------------
+
+/**
+ * 註冊 `check_messages`：可選寫入 `reply.json`；阻塞直到佇列有訊息或逾時。
+ * 取出佇列後轉成文字／圖片內容並附加 `SYSTEM_SUFFIX`。
+ */
+function registerCheckMessages(server: McpServer): void {
+	server.registerTool(
+		"check_messages",
+		{
+			description:
+				"檢查並回傳待處理的使用者訊息。每輪回覆完成後必須呼叫此工具。可透過 reply 參數將本輪摘要推送到外掛介面。",
+			inputSchema: {
+				reply: z
+					.string()
+					.optional()
+					.describe("本輪回覆摘要（支援 Markdown），將推送到外掛介面展示給使用者"),
+			},
+		},
+		async ({ reply }, extra) => {
+			await ensureDataDir();
+			await appendServerLog("info", "check_messages started");
+
+			if (reply) {
+				await fs.writeFile(
+					REPLY_FILE,
+					JSON.stringify(
+						{ content: reply, timestamp: new Date().toISOString() },
+						null,
+						2
+					),
+					"utf-8"
+				);
+			}
+
+			const waitStart = Date.now();
+			let nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL;
+
+			while (!extra.signal.aborted) {
+				const queue = await readQueue();
+				if (queue.length > 0) {
+					const results: ContentPart[] = [];
+					for (const msg of queue) {
+						const processed = await processMessage(msg);
+						if (Array.isArray(processed)) {
+							results.push(...processed);
+						} else {
+							results.push(processed);
+						}
+					}
+					await clearQueue();
+
+					if (results.length > 0 && results[results.length - 1]!.type === "text") {
+						(results[results.length - 1] as TextPart).text += SYSTEM_SUFFIX;
+					} else {
+						results.push({ type: "text", text: SYSTEM_SUFFIX });
+					}
+					await appendServerLog(
+						"info",
+						`check_messages delivered ${queue.length} queued item(s)`
+					);
+					return { content: results };
+				}
+
+				if (Date.now() - waitStart >= MAX_WAIT_MS) {
+					await appendServerLog(
+						"info",
+						`check_messages timed out after ${MAX_WAIT_MS}ms, requesting re-call`
+					);
+					return {
+						content: [
+							{
+								type: "text",
+								text: "[system] 暫無新訊息。請勿向使用者輸出此提示，立即再次呼叫 check_messages 繼續監聽。",
+							},
+						],
+					};
+				}
+
+				if (Date.now() >= nextHeartbeatAt) {
+					await emitHeartbeat(
+						server,
+						extra as ToolExtra,
+						`${MCP_DISPLAY_NAME} 仍在等待下一則使用者訊息。`
+					);
+					nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL;
+				}
+				const keepWaiting = await sleepWithAbort(extra.signal, POLL_INTERVAL);
+				if (!keepWaiting) break;
+			}
+
+			await appendServerLog(
+				"warn",
+				"check_messages was cancelled by the client while waiting"
+			);
+			return {
+				content: [
+					{
+						type: "text",
+						text: "[system] check_messages 等待被客戶端中斷。若工作階段仍需繼續，請勿向使用者輸出這條內部提示，直接再次呼叫 check_messages。",
+					},
+				],
+				isError: true,
+			};
+		}
+	);
+}
+
+/** 註冊 `send_progress`：將進度寫入 `reply.json` 並立即回傳系統提示。 */
+function registerSendProgress(server: McpServer): void {
+	server.registerTool(
+		"send_progress",
+		{
+			description:
+				"推送目前工作進度到外掛側欄。執行多步任務時，每完成一個步驟後呼叫此工具推送進度摘要。此工具立即回傳，不會等待訊息。",
+			inputSchema: {
+				progress: z
+					.string()
+					.describe("進度摘要（支援 Markdown），將推送到外掛側欄"),
+			},
+		},
+		async ({ progress }) => {
+			await ensureDataDir();
+			await fs.writeFile(
+				REPLY_FILE,
+				JSON.stringify(
+					{ content: progress, timestamp: new Date().toISOString() },
+					null,
+					2
+				),
+				"utf-8"
+			);
+			await appendServerLog("info", `send_progress: ${progress.slice(0, 100)}`);
+			return {
+				content: [
+					{
+						type: "text",
+						text: "[system] 進度已推送。請繼續執行任務，無需等待使用者回覆。",
+					},
+				],
+			};
+		}
+	);
+}
+
+/**
+ * 註冊 `ask_question`：寫入 `question.json` 並輪詢 `answer.json` 直至有答案或逾時。
+ */
+function registerAskQuestion(server: McpServer): void {
+	server.registerTool(
+		"ask_question",
+		{
+			description:
+				"向使用者提出一個或多個問題並等待回答。支援單選／多選及自訂輸入。此工具會持續等待直到使用者回答。",
+			inputSchema: {
+				questions: z
+					.array(questionItemSchema)
+					.describe("問題列表，可同時提出多題"),
+			},
+		},
+		async ({ questions }, extra) => {
+			await ensureDataDir();
+			await appendServerLog("info", "ask_question started");
+
+			const questionItems = questions.map((q, i) => ({
+				id: "q" + i,
+				question: q.question,
+				options: q.options ?? [],
+				allow_multiple: !!q.allow_multiple,
+			}));
+
+			const questionData = {
+				id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+				questions: questionItems,
+				timestamp: new Date().toISOString(),
+			};
+			await fs.writeFile(
+				QUESTION_FILE,
+				JSON.stringify(questionData, null, 2),
+				"utf-8"
+			);
+			try {
+				await fs.unlink(ANSWER_FILE);
+			} catch {
+				/* 無舊檔可刪 */
+			}
+
+			const waitStart = Date.now();
+			// 下一輪心跳時間
+			let nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL;
+
+			while (!extra.signal.aborted) {
+				try {
+					const raw = await fs.readFile(ANSWER_FILE, "utf-8");
+					const answerData = JSON.parse(raw) as { answers?: AnswerEntry[] };
+					try {
+						await fs.unlink(QUESTION_FILE);
+					} catch {
+						/* ignore */
+					}
+					try {
+						await fs.unlink(ANSWER_FILE);
+					} catch {
+						/* ignore */
+					}
+
+					const answers = answerData.answers ?? [];
+					const parts: string[] = [];
+					for (const qItem of questionItems) {
+						const ans = answers.find((a) => a.questionId === qItem.id);
+						if (!ans) continue;
+						const selected = ans.selected ?? [];
+						const other = ans.other ?? "";
+						let text = "";
+						if (selected.length > 0) {
+							const labels = selected.map(
+								(sid) => qItem.options.find((o) => o.id === sid)?.label ?? sid
+							);
+							text = "選擇: " + labels.join(", ");
+						}
+						if (other) {
+							text += text ? "\n使用者補充: " + other : "使用者回答: " + other;
+						}
+						if (text) {
+							parts.push(
+								questionItems.length > 1
+									? "【" + qItem.question + "】\n" + text
+									: text
+							);
+						}
+					}
+					const finalText =
+						parts.length > 0 ? parts.join("\n\n") : "(使用者未作答)";
+					await appendServerLog("info", "ask_question received user answer");
+					return { content: [{ type: "text", text: finalText }] };
+				} catch {
+					/* 尚未有有效 answer */
+				}
+
+				if (Date.now() - waitStart >= MAX_WAIT_MS) {
+					await appendServerLog(
+						"info",
+						`ask_question timed out after ${MAX_WAIT_MS}ms, requesting re-call`
+					);
+					return {
+						content: [
+							{
+								type: "text",
+								text: "[system] 使用者尚未回答。請勿向使用者輸出此提示，立即再次呼叫 ask_question（使用相同參數）繼續等待。",
+							},
+						],
+					};
+				}
+
+				if (Date.now() >= nextHeartbeatAt) {
+					await emitHeartbeat(
+						server,
+						extra as ToolExtra,
+						`${MCP_DISPLAY_NAME} 仍在等待使用者的回答。`
+					);
+					nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL;
+				}
+				const keepWaiting = await sleepWithAbort(extra.signal, POLL_INTERVAL);
+				if (!keepWaiting) break;
+			}
+
+			await appendServerLog(
+				"warn",
+				"ask_question was cancelled by the client while waiting"
+			);
+			return {
+				content: [
+					{
+						type: "text",
+						text: "[system] ask_question 等待被客戶端中斷。若仍需要使用者回答，請勿向使用者輸出這條內部提示，直接再次呼叫 ask_question。",
+					},
+				],
+				isError: true,
+			};
+		}
+	);
+}
+
+/** 註冊全部 MCP 工具。 */
+function registerAllTools(server: McpServer): void {
+	registerCheckMessages(server);
+	registerSendProgress(server);
+	registerAskQuestion(server);
+}
+
+// --- 進入點 ---------------------------------------------------------------
+
+/** 將未知錯誤轉為可寫入日誌的字串。 */
+function formatError(error: unknown): string {
+	if (error instanceof Error) return `${error.name}: ${error.message}`;
+	return String(error);
+}
+
+process.on("uncaughtException", (error) => {
+	void appendServerLog("error", `uncaughtException: ${formatError(error)}`);
+});
+process.on("unhandledRejection", (reason) => {
+	void appendServerLog("error", `unhandledRejection: ${formatError(reason)}`);
+});
+
+const server = new McpServer(MCP_SERVER_INFO, { capabilities: { logging: {} } });
+
+registerAllTools(server);
+
+const transport = new StdioServerTransport();
+server.connect(transport);

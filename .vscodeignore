@@ -1,0 +1,10 @@
+PROJECT.md
+INSTALL.md
+bun.lock
+node_modules/**
+mcp-server/**
+src/**
+tsconfig.json
+*.vsix
+.gitignore
+**/*.map
