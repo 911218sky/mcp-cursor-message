@@ -2,6 +2,12 @@
 
 本文件給 **AI 編碼代理**與 **自動化流程** 使用：如何在儲存庫內安全地修改、測試與回報，而不破壞擴充與 MCP 之間的契約。終端使用者請讀 [README.md](./README.md)；架構細節請讀 [PROJECT.md](./PROJECT.md)。
 
+## Git 與使用者同意（強制）
+
+- **未經使用者明示同意，不得**執行 `git commit`、`git push`、`git push --force`／`--force-with-lease`、改寫遠端歷史、`git tag` 推送，或任何等同「幫使用者擅自提交／發佈」的操作。
+- 代理應以修改檔案、跑測試／建置、**建議 commit 訊息與指令**為主；若使用者要你代為提交，必須在對話中**確認過**（或使用者已給出當次明確授權）。
+- 例外的僅限：**使用者自己設定**且非代理操作的 CI／bot（與本條無關）。
+
 ## 指引原則
 
 1. **單一事實來源**：IPC 檔名、語意與 `MESSENGER_DATA_DIR` 行為以 [PROJECT.md](./PROJECT.md)（流程章節與「資料夾裡的檔案」速查表）與程式碼為準；修改時同步更新 **PROJECT.md** 與相關型別（`src/ipc-types.ts`、`mcp-server/index.ts`）。
