@@ -35,7 +35,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          NEXT_VERSION="$(node -e "const fs=require('fs'); const p='./package.json'; const pkg=JSON.parse(fs.readFileSync(p,'utf8')); const [ma,mi,pa]=pkg.version.split('.').map(Number); const next=`${ma}.${mi}.${pa+1}`; pkg.version=next; fs.writeFileSync(p, JSON.stringify(pkg, null, '\t')+'\\n'); process.stdout.write(next);")"
+          NEXT_VERSION="$(node -e "const fs=require('fs'); const p='./package.json'; const pkg=JSON.parse(fs.readFileSync(p,'utf8')); const [ma,mi,pa]=pkg.version.split('.').map(Number); const next=String(ma)+'.'+String(mi)+'.'+String(pa+1); pkg.version=next; fs.writeFileSync(p, JSON.stringify(pkg, null, '\t')+'\\n'); process.stdout.write(next);")"
 
           git add package.json
           git commit -m "chore(release): v$NEXT_VERSION"
