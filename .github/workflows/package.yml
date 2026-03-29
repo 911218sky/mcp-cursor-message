@@ -23,10 +23,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
+          bun-version: 1.2.17
 
       - name: Bump patch version and push tag
         id: bump
@@ -35,7 +35,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          NEXT_VERSION="$(node -e "const fs=require('fs'); const p='./package.json'; const pkg=JSON.parse(fs.readFileSync(p,'utf8')); const [ma,mi,pa]=pkg.version.split('.').map(Number); const next=String(ma)+'.'+String(mi)+'.'+String(pa+1); pkg.version=next; fs.writeFileSync(p, JSON.stringify(pkg, null, '\t')+'\\n'); process.stdout.write(next);")"
+          NEXT_VERSION="$(bun -e "const p='./package.json'; const pkg=JSON.parse(await Bun.file(p).text()); const [ma,mi,pa]=pkg.version.split('.').map(Number); const next=String(ma)+'.'+String(mi)+'.'+String(pa+1); pkg.version=next; await Bun.write(p, JSON.stringify(pkg, null, '\t')+'\\n'); process.stdout.write(next);")"
           echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
 
           git add package.json
@@ -43,11 +43,6 @@ jobs:
           git tag "v$NEXT_VERSION"
           git push origin HEAD:main
           git push origin "v$NEXT_VERSION"
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.2.17
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
