@@ -2,7 +2,7 @@
 	"name": "mcp-cursor-message",
 	"displayName": "mcp-cursor-message",
 	"description": "MCP side-channel chat: sidebar queue, check_messages / ask_question; Cursor integration.",
-	"version": "9.3.1",
+	"version": "9.3.2",
 	"author": "911218sky",
 	"publisher": "local",
 	"repository": {
