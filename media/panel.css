@@ -748,6 +748,13 @@ body.app {
 	display: none;
 }
 
+.composer-paste-thumbs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: flex-start;
+}
+
 .composer-paste-thumb-wrap {
 	position: relative;
 	display: inline-block;

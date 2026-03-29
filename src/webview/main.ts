@@ -62,10 +62,6 @@ function applyChrome(loc: UiLocale): void {
 	$("chromeComposerAttachHint").textContent = t.composerAttachHint;
 	$("chromeSendLabel").textContent = t.btnSend;
 	($("msgInput") as HTMLTextAreaElement).placeholder = t.placeholderInput;
-	$("btnRemovePendingPaste").setAttribute(
-		"aria-label",
-		t.pendingPasteRemoveAria
-	);
 	updateLanguageSelect(lastUiLanguageSetting);
 }
 
@@ -83,8 +79,8 @@ function updateLanguageSelect(setting: UiLanguageSetting): void {
 /** 以 id 取得 DOM 節點（不存在時會拋錯，與面板 HTML 約定同步）。 */
 const $ = (id: string) => document.getElementById(id)!;
 
-/** 輸入框內 Ctrl+V 暫存之圖片（按「送出」才進佇列）。 */
-let pendingPaste: { b64: string; mime: string } | null = null;
+/** 輸入框內 Ctrl+V 暫存之圖片（按「送出」才進佇列；可複數張）。 */
+let pendingPastes: { b64: string; mime: string }[] = [];
 
 /** 主區「內容／Token（約略）」分頁切換，並寫入 sessionStorage 供下次開啟還原。 */
 function setMainTab(which: "main" | "token"): void {
@@ -244,14 +240,24 @@ function renderQueuePreview(queue: unknown): void {
 	}
 	let h = "";
 	let i = 0;
-	for (const it of queue as { type?: string; content?: string; path?: string }[]) {
+	for (const it of queue as {
+		type?: string;
+		content?: string;
+		path?: string;
+		caption?: string;
+	}[]) {
 		const tp = it.type ?? "text";
-		const preview =
-			tp === "text"
-				? (it.content ?? "").slice(0, 80)
-				: tp === "image"
-					? tr.previewImage
-					: `${tr.previewFilePrefix} ${String(it.path ?? "").split(/[/\\]/).pop() ?? ""}`;
+		let preview: string;
+		if (tp === "text") {
+			preview = (it.content ?? "").slice(0, 80);
+		} else if (tp === "image") {
+			const cap = String(it.caption ?? "").trim();
+			preview = cap
+				? `${tr.previewImage} · ${cap.slice(0, 60)}`
+				: tr.previewImage;
+		} else {
+			preview = `${tr.previewFilePrefix} ${String(it.path ?? "").split(/[/\\]/).pop() ?? ""}`;
+		}
 		h += `<div class="qp" role="group">`;
 		h += `<span class="qp-text">${esc(preview)}</span>`;
 		h += `<button type="button" class="qp-remove" data-index="${i}" title="${esc(tr.removeQueueTitle)}" aria-label="${esc(tr.removeQueueAria)}">${esc(tr.removeQueue)}</button>`;
@@ -317,18 +323,27 @@ const sendBtn = $("sendBtn") as HTMLButtonElement;
 
 function renderPendingPaste(): void {
 	const strip = $("composerPasteStrip");
-	const thumb = $("composerPasteThumb") as HTMLImageElement;
-	if (!pendingPaste) {
+	const container = $("composerPasteThumbs");
+	const tr = S();
+	if (pendingPastes.length === 0) {
 		strip.classList.add("hidden");
-		thumb.removeAttribute("src");
+		container.innerHTML = "";
 		return;
 	}
 	strip.classList.remove("hidden");
-	thumb.src = `data:${pendingPaste.mime};base64,${pendingPaste.b64}`;
+	let h = "";
+	for (let i = 0; i < pendingPastes.length; i++) {
+		const p = pendingPastes[i]!;
+		h += `<div class="composer-paste-thumb-wrap">`;
+		h += `<img class="composer-paste-thumb" alt="" src="data:${esc(p.mime)};base64,${esc(p.b64)}" />`;
+		h += `<button type="button" class="composer-paste-remove" data-index="${i}" aria-label="${esc(tr.pendingPasteRemoveAria)}">×</button>`;
+		h += `</div>`;
+	}
+	container.innerHTML = h;
 }
 
 function clearPendingPaste(): void {
-	pendingPaste = null;
+	pendingPastes = [];
 	renderPendingPaste();
 	updateSend();
 }
@@ -336,36 +351,53 @@ function clearPendingPaste(): void {
 /** 依輸入或暫存貼圖，啟用或停用「送出」按鈕。 */
 function updateSend(): void {
 	const hasText = !!ta.value.trim();
-	sendBtn.disabled = !hasText && !pendingPaste;
+	sendBtn.disabled = !hasText && pendingPastes.length === 0;
 }
 
 ta.addEventListener("input", updateSend);
-/** 輸入框內 Ctrl+V 貼上剪貼簿圖片時先暫存，按「送出」再進佇列。 */
-ta.addEventListener("paste", (e: ClipboardEvent) => {
-	const items = e.clipboardData?.items;
-	if (!items?.length) return;
-	for (let i = 0; i < items.length; i++) {
-		const it = items[i];
-		if (!it.type.startsWith("image/")) continue;
-		e.preventDefault();
-		const file = it.getAsFile();
-		if (!file) continue;
+function readClipboardImageFile(file: File): Promise<{ b64: string; mime: string } | null> {
+	return new Promise((resolve) => {
 		const reader = new FileReader();
 		reader.onload = () => {
 			const dataUrl = reader.result as string;
 			const comma = dataUrl.indexOf(",");
 			const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : "";
-			if (!b64) return;
-			pendingPaste = {
+			if (!b64) {
+				resolve(null);
+				return;
+			}
+			resolve({
 				b64,
 				mime: file.type || "image/png",
-			};
-			renderPendingPaste();
-			updateSend();
+			});
 		};
+		reader.onerror = () => resolve(null);
 		reader.readAsDataURL(file);
-		return;
+	});
+}
+
+/** 輸入框內 Ctrl+V 貼上剪貼簿圖片時先暫存，按「送出」再進佇列（可一次多張）。 */
+ta.addEventListener("paste", (e: ClipboardEvent) => {
+	const items = e.clipboardData?.items;
+	if (!items?.length) return;
+	const files: File[] = [];
+	for (let i = 0; i < items.length; i++) {
+		const it = items[i];
+		if (!it.type.startsWith("image/")) continue;
+		const file = it.getAsFile();
+		if (file) files.push(file);
 	}
+	if (!files.length) return;
+	e.preventDefault();
+	void Promise.all(files.map(readClipboardImageFile)).then((results) => {
+		const next = results.filter(
+			(r): r is { b64: string; mime: string } => r !== null
+		);
+		if (!next.length) return;
+		pendingPastes = pendingPastes.concat(next);
+		renderPendingPaste();
+		updateSend();
+	});
 });
 ta.addEventListener("keydown", (e) => {
 	if (e.key !== "Enter") return;
@@ -377,13 +409,15 @@ ta.addEventListener("keydown", (e) => {
 /** 讀取輸入框／暫存貼圖並送至擴充，成功後清空。 */
 function doSend(): void {
 	const text = ta.value.trim();
-	if (!pendingPaste && !text) return;
-	if (pendingPaste) {
+	if (pendingPastes.length === 0 && !text) return;
+	if (pendingPastes.length > 0) {
 		vscode.postMessage({
 			type: "sendComposer",
 			text,
-			base64: pendingPaste.b64,
-			mime: pendingPaste.mime,
+			images: pendingPastes.map((p) => ({
+				base64: p.b64,
+				mime: p.mime,
+			})),
 		});
 		clearPendingPaste();
 	} else {
@@ -424,8 +458,15 @@ $("queuePreview").addEventListener("click", (e) => {
 
 initMainTabs();
 
-$("btnRemovePendingPaste").addEventListener("click", () => {
-	clearPendingPaste();
+$("composerPasteStrip").addEventListener("click", (ev) => {
+	const t = ev.target as HTMLElement | null;
+	const btn = t?.closest?.(".composer-paste-remove") as HTMLElement | null;
+	if (!btn) return;
+	const idx = Number(btn.getAttribute("data-index"));
+	if (!Number.isInteger(idx) || idx < 0 || idx >= pendingPastes.length) return;
+	pendingPastes.splice(idx, 1);
+	renderPendingPaste();
+	updateSend();
 });
 
 $("uiLanguageSelect").addEventListener("change", () => {

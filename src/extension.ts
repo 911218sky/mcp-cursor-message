@@ -401,27 +401,49 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 						const text = String(
 							(msg as { text?: string }).text ?? ""
 						).trim();
+						const rawImages = (msg as {
+							images?: { base64?: string; mime?: string }[];
+						}).images;
 						const base64 = String(
 							(msg as { base64?: string }).base64 ?? ""
 						);
 						const mime = String(
 							(msg as { mime?: string }).mime ?? "image/png"
 						);
-						if (!text && !base64) break;
-						if (base64) {
+						const images: { base64: string; mime: string }[] = [];
+						if (Array.isArray(rawImages) && rawImages.length > 0) {
+							for (const im of rawImages) {
+								const b = String(im?.base64 ?? "");
+								if (!b) continue;
+								images.push({
+									base64: b,
+									mime: String(im?.mime ?? "image/png"),
+								});
+							}
+						} else if (base64) {
+							images.push({ base64, mime });
+						}
+						if (!text && images.length === 0) break;
+						// 同時有文字與貼圖時：先一則文字再各張圖，側欄佇列與模型順序皆為「字在前、圖在後」。
+						if (text && images.length > 0) {
+							await appendQueueWithTokenRecord(dir, {
+								type: "text",
+								content: text,
+							});
+						}
+						for (const im of images) {
 							const fp = await writePasteImageFromBase64(
 								dir,
-								base64,
-								mime
+								im.base64,
+								im.mime
 							);
 							if (!fp) break;
-							const cap = text || undefined;
 							await appendQueueWithTokenRecord(dir, {
 								type: "image",
 								path: fp,
-								...(cap ? { caption: cap } : {}),
 							});
-						} else {
+						}
+						if (images.length === 0 && text) {
 							await appendQueueWithTokenRecord(dir, {
 								type: "text",
 								content: text,
