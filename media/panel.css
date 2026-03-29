@@ -532,6 +532,12 @@ body.app[data-font-size="lg"] {
 	position: relative;
 }
 
+/* 摺疊預覽：與 #replyContent 懶載入純文字一致（保留換行、行高對齊 .reply-content） */
+.history-item-body[data-lazy] {
+	white-space: pre-wrap;
+	line-height: 1.52;
+}
+
 .history-item-body.is-collapsed {
 	max-height: 9.72em;
 	overflow: hidden;
@@ -699,6 +705,11 @@ body.app[data-font-size="lg"] {
 /* Markdown 摘要（check_messages / send_progress 的 reply） */
 .reply-content--md {
 	white-space: normal;
+}
+
+/* 長摘要尚未展開時為純文字預覽，需保留換行（覆蓋上一則 white-space: normal） */
+#replyContent[data-reply-lazy="1"] {
+	white-space: pre-wrap;
 }
 
 .reply-content--md :first-child {

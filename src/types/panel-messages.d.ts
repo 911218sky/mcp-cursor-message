@@ -3,6 +3,13 @@
  */
 import type { AnswerEntry } from "./ipc-json";
 
+/** 側欄對話歷史（持久化於 `messenger-data/history.json`）。 */
+export type PanelHistoryEntry = {
+	role: "user" | "assistant";
+	content: string;
+	ts: number;
+};
+
 /** Webview → extension（`vscode.postMessage`），與 `src/webview/main.ts` 送出欄位一致。 */
 export type WebviewHostMessage =
 	| { type: "ready" }
@@ -20,7 +27,8 @@ export type WebviewHostMessage =
 	| { type: "submitAnswer"; answers?: AnswerEntry[] }
 	| { type: "cancelQuestion" }
 	| { type: "ackReply" }
-	| { type: "pickQueueFiles"; kind?: "image" | "file" };
+	| { type: "pickQueueFiles"; kind?: "image" | "file" }
+	| { type: "saveHistory"; entries: PanelHistoryEntry[] };
 
 /** MCP `ask_question` 寫入 `question.json` 後，經 `pushState` 帶入頂欄問答卡。 */
 export type QuestionOption = { id: string; label: string };
@@ -54,5 +62,7 @@ export type ExtensionPanelStateMessage = {
 	question: unknown;
 	reply: { content?: string } | null;
 	queue: unknown;
+	/** 與 `dataDir` 內 `history.json` 同步。 */
+	history: PanelHistoryEntry[];
 	tokenStats?: PanelTokenStats;
 };

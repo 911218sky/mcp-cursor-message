@@ -8,6 +8,7 @@ import * as vscode from "vscode";
 import {
 	appendQueue,
 	ensureDataDir,
+	readPanelHistory,
 	readQuestion,
 	readQueue,
 	readReply,
@@ -15,6 +16,8 @@ import {
 	unlinkPasteImageIfManaged,
 	unlinkReply,
 	writeAnswerFile,
+	writePanelHistory,
+	normalizePanelHistory,
 } from "./ipc";
 import { installMcpServer, removeMcpServer } from "./mcp-config";
 import type { QueueMsg } from "./types/ipc-json";
@@ -225,6 +228,7 @@ async function pushStateToPanel(): Promise<void> {
 	const question = await readQuestion(dataDir);
 	const reply = await readReply(dataDir);
 	const queue = await readQueue(dataDir);
+	const history = await readPanelHistory(dataDir);
 	const tokenStats = await readTokenStats(dataDir);
 	const msg: ExtensionPanelStateMessage = {
 		type: "state",
@@ -233,6 +237,7 @@ async function pushStateToPanel(): Promise<void> {
 		question,
 		reply: reply ? { content: reply.content } : null,
 		queue,
+		history,
 		tokenStats,
 	};
 	void panelView.webview.postMessage(msg);
@@ -353,6 +358,12 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 					case "ready":
 						await pushStateToPanel();
 						break;
+					case "saveHistory": {
+						const entries = normalizePanelHistory(msg.entries as unknown);
+						await writePanelHistory(dir, entries);
+						await pushStateToPanel();
+						break;
+					}
 					// 設定側欄語言
 					case "setUiLanguage": {
 						const v = String(msg.value ?? "");

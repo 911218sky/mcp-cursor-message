@@ -16,6 +16,7 @@ import {
 } from "./prefs";
 import type {
 	ExtensionPanelStateMessage,
+	PanelHistoryEntry,
 	PanelTokenStats,
 	PanelUiLanguageSetting,
 	QuestionPayload,
@@ -29,7 +30,8 @@ declare function acquireVsCodeApi(): {
 
 const vscode = acquireVsCodeApi();
 
-const HISTORY_STORAGE_KEY = "mcpMessengerHistory";
+/** 舊版僅存於 webview localStorage 時之鍵；若 `history.json` 為空則單次遷移後清除。 */
+const LEGACY_HISTORY_STORAGE_KEY = "mcpMessengerHistory";
 const DEFAULT_LOCALE: UiLocale = "en";
 const EMPTY_MARK = "—";
 const IMAGE_MIME_FALLBACK = "image/png";
@@ -43,16 +45,13 @@ type QueuePreviewItem = {
 	path?: string;
 	caption?: string;
 };
-type HistoryRole = "user" | "assistant";
-type HistoryEntry = {
-	role: HistoryRole;
-	content: string;
-	ts: number;
-};
+type HistoryRole = PanelHistoryEntry["role"];
 const HISTORY_COLLAPSE_MIN_CHARS = 260;
 const HISTORY_COLLAPSE_MIN_LINES = 6;
 /** AI 回覆超過此長度時預設折疊，避免卡片過高。 */
 const REPLY_COLLAPSE_MIN_CHARS = 380;
+/** 歷史／摘要預設折疊時只顯示前段純文字，展開後才做完整 Markdown 解析（減少 DOM 與 marked 成本）。 */
+const LAZY_PREVIEW_MAX_CHARS = 360;
 
 /** 目前介面語系（由 extension 依設定推送；首次載入預設英文以符合擴充預設）。 */
 let uiLocale: UiLocale = DEFAULT_LOCALE;
@@ -64,14 +63,20 @@ let lastUiLanguageSetting: PanelUiLanguageSetting = "en";
 let pendingPastes: PendingPaste[] = [];
 let curQuestion: QuestionPayload | null = null;
 const selectedAnswers: Record<string, string[]> = {};
-/** UI 端本地對話歷史（不影響 MCP queue 格式）。 */
-let historyEntries: HistoryEntry[] = [];
+/** 與 `messenger-data/history.json` 同步（經 `state` 與 `saveHistory`）。 */
+let historyEntries: PanelHistoryEntry[] = [];
 /** 用於避免同一則 reply 在 state 重推時重複寫入歷史。 */
 let lastSeenReplyContent = "";
 let isHistoryPanelCollapsed = false;
 let isReplyPanelCollapsed = false;
 /** Reply 卡片目前是否展開（僅前端顯示狀態）。 */
 let isReplyExpanded = false;
+/** 長摘要折疊時延後完整 Markdown 渲染，於首次展開時使用。 */
+let pendingReplyMarkdown = "";
+/** 與 `renderReply` 同步，用於新摘要抵達時重置展開狀態。 */
+let lastReplyExpandKey = "";
+/** 目前摘要是否已至少完整跑過 Markdown（含使用者展開後），避免 state 重推時又變回純預覽。 */
+let replyMarkdownHydrated = false;
 
 function S() {
 	return strings(uiLocale);
@@ -211,6 +216,13 @@ function esc(s: string): string {
 		.replace(/>/g, "&gt;");
 }
 
+/** 摺疊預覽用：截斷純文字（不經 Markdown），必要時加省略號。 */
+function historyPreviewPlain(text: string, maxChars: number): string {
+	const t = text.trim();
+	if (t.length <= maxChars) return t;
+	return `${t.slice(0, maxChars).trimEnd()}…`;
+}
+
 /** 隱藏問答卡並清除當前題目狀態。 */
 function hideQuestionCard(): void {
 	questionCard.classList.add("hidden");
@@ -317,15 +329,48 @@ function renderReply(content: string | undefined): void {
 		replyContent.innerHTML = "";
 		replyContent.classList.remove("reply-content--md");
 		replyContent.classList.remove("is-collapsed");
+		replyContent.removeAttribute("data-reply-lazy");
 		btnToggleReply.classList.add("hidden");
 		isReplyExpanded = false;
+		pendingReplyMarkdown = "";
+		lastReplyExpandKey = "";
+		replyMarkdownHydrated = false;
 		return;
 	}
-	// 長回覆預設折疊，讓使用者先看到歷史與最新訊息。
+	const trimmed = content.trim();
+	if (trimmed !== lastReplyExpandKey) {
+		isReplyExpanded = false;
+		replyMarkdownHydrated = false;
+		lastReplyExpandKey = trimmed;
+	}
+	// 長回覆預設折疊，讓使用者先看到歷史與最新訊息；折疊時僅插入純文字預覽，展開後才跑 Markdown。
 	const shouldCollapse = content.length > REPLY_COLLAPSE_MIN_CHARS;
-	if (!shouldCollapse) isReplyExpanded = false;
+	if (!shouldCollapse) {
+		isReplyExpanded = false;
+		pendingReplyMarkdown = "";
+		replyMarkdownHydrated = true;
+		replyContent.removeAttribute("data-reply-lazy");
+		replyContent.classList.add("reply-content--md");
+		replyContent.innerHTML = markdownToSafeHtml(content);
+		replyContent.classList.remove("is-collapsed");
+		btnToggleReply.classList.add("hidden");
+		replyCard.classList.remove("hidden");
+		replyCard.classList.toggle("is-collapsed", isReplyPanelCollapsed);
+		return;
+	}
 	replyContent.classList.add("reply-content--md");
-	replyContent.innerHTML = markdownToSafeHtml(content);
+	const useLazyPreview =
+		shouldCollapse && !isReplyExpanded && !replyMarkdownHydrated;
+	if (useLazyPreview) {
+		pendingReplyMarkdown = content;
+		replyContent.textContent = historyPreviewPlain(content, LAZY_PREVIEW_MAX_CHARS);
+		replyContent.dataset.replyLazy = "1";
+	} else {
+		pendingReplyMarkdown = "";
+		replyMarkdownHydrated = true;
+		replyContent.removeAttribute("data-reply-lazy");
+		replyContent.innerHTML = markdownToSafeHtml(content);
+	}
 	replyContent.classList.toggle("is-collapsed", shouldCollapse && !isReplyExpanded);
 	btnToggleReply.classList.toggle("hidden", !shouldCollapse);
 	if (shouldCollapse) {
@@ -339,35 +384,69 @@ function renderReply(content: string | undefined): void {
 	replyCard.classList.toggle("is-collapsed", isReplyPanelCollapsed);
 }
 
-/** 讀取歷史（localStorage），資料異常時退回空陣列。 */
-function loadHistory(): HistoryEntry[] {
-	try {
-		const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
-		if (!raw) return [];
-		const parsed = JSON.parse(raw) as unknown;
-		if (!Array.isArray(parsed)) return [];
-		const next = parsed
-			.map((item): HistoryEntry | null => {
-				if (!item || typeof item !== "object") return null;
-				const row = item as Partial<HistoryEntry>;
-				if (row.role !== "user" && row.role !== "assistant") return null;
-				if (typeof row.content !== "string" || !row.content.trim()) return null;
-				const ts = typeof row.ts === "number" ? row.ts : Date.now();
-				return { role: row.role, content: row.content, ts };
-			})
-			.filter((row): row is HistoryEntry => row !== null);
-		return next;
-	} catch {
-		return [];
+/** 依 `lastSeenReplyContent` 對齊「最後一則 AI」內容，供與 `reply.json` 去重。 */
+function refreshLastSeenReplyFromHistory(): void {
+	lastSeenReplyContent = "";
+	for (let i = historyEntries.length - 1; i >= 0; i--) {
+		const row = historyEntries[i];
+		if (row?.role === "assistant") {
+			lastSeenReplyContent = row.content;
+			break;
+		}
 	}
 }
 
-/** 寫回歷史（localStorage），失敗時靜默略過。 */
-function saveHistory(): void {
+/** 與擴充 `normalizePanelHistory` 對齊，驗證 `state` 帶入之歷史。 */
+function normalizeHistoryPayload(raw: unknown): PanelHistoryEntry[] {
+	if (!Array.isArray(raw)) return [];
+	const out: PanelHistoryEntry[] = [];
+	for (const item of raw) {
+		if (!item || typeof item !== "object") continue;
+		const row = item as Partial<PanelHistoryEntry>;
+		if (row.role !== "user" && row.role !== "assistant") continue;
+		if (typeof row.content !== "string" || !row.content.trim()) continue;
+		const ts = typeof row.ts === "number" ? row.ts : Date.now();
+		out.push({ role: row.role, content: row.content.trim(), ts });
+	}
+	return out;
+}
+
+/** 請擴充寫入 `history.json` 並於成功後經 watcher 重推 `state`。 */
+function persistHistory(): void {
+	vscode.postMessage({ type: "saveHistory", entries: historyEntries });
+}
+
+/**
+ * 舊版歷史僅在 localStorage；若磁碟尚無資料則遷移一次並請擴充落檔。
+ */
+function tryMigrateHistoryFromLocalStorage(): void {
+	if (historyEntries.length > 0) return;
 	try {
-		localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyEntries));
+		let raw = localStorage.getItem(LEGACY_HISTORY_STORAGE_KEY);
+		if (!raw) {
+			for (let i = 0; i < localStorage.length; i++) {
+				const k = localStorage.key(i);
+				if (k?.startsWith(`${LEGACY_HISTORY_STORAGE_KEY}:`)) {
+					raw = localStorage.getItem(k);
+					if (raw) break;
+				}
+			}
+		}
+		if (!raw) return;
+		const migrated = normalizeHistoryPayload(JSON.parse(raw) as unknown);
+		if (migrated.length === 0) return;
+		historyEntries = migrated;
+		localStorage.removeItem(LEGACY_HISTORY_STORAGE_KEY);
+		for (let i = localStorage.length - 1; i >= 0; i--) {
+			const k = localStorage.key(i);
+			if (k?.startsWith(`${LEGACY_HISTORY_STORAGE_KEY}:`)) localStorage.removeItem(k);
+		}
+		persistHistory();
+		refreshLastSeenReplyFromHistory();
+		renderHistory();
+		scrollHistoryToBottom();
 	} catch {
-		/* ignore storage errors */
+		/* ignore */
 	}
 }
 
@@ -381,7 +460,7 @@ function renderHistory(): void {
 		return;
 	}
 	const html = historyEntries
-		.map((item) => {
+		.map((item, i) => {
 			const who =
 				item.role === "user" ? esc(tr.historyUserLabel) : esc(tr.historyAiLabel);
 			const longByChars = item.content.length > HISTORY_COLLAPSE_MIN_CHARS;
@@ -389,17 +468,29 @@ function renderHistory(): void {
 				item.content.split(/\r?\n/).filter((line) => line.trim().length > 0).length >
 				HISTORY_COLLAPSE_MIN_LINES;
 			const shouldCollapse = longByChars || longByLines;
-			const body =
-				item.role === "assistant"
-					? markdownToSafeHtml(item.content)
-					: esc(item.content).replace(/\n/g, "<br>");
-			const bodyClass = shouldCollapse
-				? "history-item-body is-collapsed"
-				: "history-item-body";
+			const previewPlain = historyPreviewPlain(
+				item.content,
+				LAZY_PREVIEW_MAX_CHARS,
+			);
+			const previewHtml = esc(previewPlain);
+			let bodyInner: string;
+			let bodyClass: string;
+			let bodyAttrs = "";
+			if (shouldCollapse) {
+				bodyInner = previewHtml;
+				bodyClass = "history-item-body is-collapsed";
+				bodyAttrs = ` data-history-index="${i}" data-lazy="${item.role}"`;
+			} else if (item.role === "assistant") {
+				bodyInner = markdownToSafeHtml(item.content);
+				bodyClass = "history-item-body";
+			} else {
+				bodyInner = esc(item.content).replace(/\n/g, "<br>");
+				bodyClass = "history-item-body";
+			}
 			const toggleBtn = shouldCollapse
 				? `<button type="button" class="history-toggle" data-expanded="false" aria-expanded="false">${esc(tr.historyExpand)}</button>`
 				: "";
-			return `<div class="history-item history-item--${item.role}"><div class="history-item-head">${who}</div><div class="${bodyClass}">${body}</div>${toggleBtn}</div>`;
+			return `<div class="history-item history-item--${item.role}"><div class="history-item-head">${who}</div><div class="${bodyClass}"${bodyAttrs}>${bodyInner}</div>${toggleBtn}</div>`;
 		})
 		.join("");
 	historyList.innerHTML = html;
@@ -444,6 +535,22 @@ historyList.addEventListener("click", (ev) => {
 	const tr = S();
 	const isExpanded = btn.getAttribute("data-expanded") === "true";
 	const nextExpanded = !isExpanded;
+	if (nextExpanded) {
+		const lazy = body.getAttribute("data-lazy");
+		if (lazy === "assistant" || lazy === "user") {
+			const idx = Number(body.getAttribute("data-history-index"));
+			if (Number.isInteger(idx) && idx >= 0 && idx < historyEntries.length) {
+				const entry = historyEntries[idx];
+				if (entry.role === "assistant" && lazy === "assistant") {
+					body.innerHTML = markdownToSafeHtml(entry.content);
+				} else if (entry.role === "user" && lazy === "user") {
+					body.innerHTML = esc(entry.content).replace(/\n/g, "<br>");
+				}
+				body.removeAttribute("data-lazy");
+				body.removeAttribute("data-history-index");
+			}
+		}
+	}
 	body.classList.toggle("is-collapsed", !nextExpanded);
 	btn.setAttribute("data-expanded", String(nextExpanded));
 	btn.setAttribute("aria-expanded", String(nextExpanded));
@@ -455,7 +562,7 @@ function appendHistory(role: HistoryRole, content: string): void {
 	const text = content.trim();
 	if (!text) return;
 	historyEntries.push({ role, content: text, ts: Date.now() });
-	saveHistory();
+	persistHistory();
 	renderHistory();
 	scrollHistoryToBottom();
 }
@@ -509,6 +616,11 @@ window.addEventListener("message", (ev) => {
 	const raw = ev.data as { type?: string };
 	if (raw.type !== "state") return;
 	const m = raw as ExtensionPanelStateMessage;
+	historyEntries = normalizeHistoryPayload(m.history ?? []);
+	if (historyEntries.length === 0) {
+		tryMigrateHistoryFromLocalStorage();
+	}
+	refreshLastSeenReplyFromHistory();
 	lastQueue = m.queue;
 	lastUiLanguageSetting = m.uiLanguageSetting;
 	applyChrome(m.uiLocale);
@@ -524,6 +636,7 @@ window.addEventListener("message", (ev) => {
 	lastSeenReplyContent = incomingReply;
 	renderQueuePreview(m.queue);
 	renderTokenStats(m.tokenStats);
+	renderHistory();
 });
 
 /** 更新輸入區下方暫存貼圖縮圖列（尚未送出）。 */
@@ -660,6 +773,12 @@ replyAck.addEventListener("click", () => {
 btnToggleReply.addEventListener("click", () => {
 	isReplyExpanded = !isReplyExpanded;
 	const tr = S();
+	if (isReplyExpanded && replyContent.dataset.replyLazy === "1" && pendingReplyMarkdown) {
+		replyContent.innerHTML = markdownToSafeHtml(pendingReplyMarkdown);
+		replyContent.removeAttribute("data-reply-lazy");
+		pendingReplyMarkdown = "";
+		replyMarkdownHydrated = true;
+	}
 	replyContent.classList.toggle("is-collapsed", !isReplyExpanded);
 	btnToggleReply.textContent = isReplyExpanded
 		? tr.replyCollapse
@@ -670,7 +789,7 @@ btnToggleReply.addEventListener("click", () => {
 btnClearHistory.addEventListener("click", () => {
 	historyEntries = [];
 	lastSeenReplyContent = "";
-	saveHistory();
+	persistHistory();
 	renderHistory();
 });
 
@@ -710,16 +829,7 @@ isHistoryPanelCollapsed = loadHistoryPanelCollapsed();
 setHistoryPanelCollapsed(isHistoryPanelCollapsed);
 isReplyPanelCollapsed = loadReplyPanelCollapsed();
 setReplyPanelCollapsed(isReplyPanelCollapsed);
-historyEntries = loadHistory();
-for (let i = historyEntries.length - 1; i >= 0; i--) {
-	const row = historyEntries[i];
-	if (row.role === "assistant") {
-		lastSeenReplyContent = row.content;
-		break;
-	}
-}
 renderHistory();
-scrollHistoryToBottom();
 
 /** 暫存貼圖列：移除單張預覽（僅前端狀態，未送出前可刪）。 */
 composerPasteStrip.addEventListener("click", (ev) => {

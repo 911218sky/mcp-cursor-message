@@ -4,6 +4,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { PanelHistoryEntry } from "./types/panel-messages";
 import type { AnswerEntry, QueueMsg } from "./types/ipc-json";
 
 /** 佇列持久化時附加 `timestamp`（供 UI 預覽）。 */
@@ -17,6 +18,7 @@ export function getIpcPaths(dataDir: string) {
 		questionFile: path.join(dataDir, "question.json"),
 		answerFile: path.join(dataDir, "answer.json"),
 		replyFile: path.join(dataDir, "reply.json"),
+		historyFile: path.join(dataDir, "history.json"),
 	};
 }
 
@@ -152,4 +154,42 @@ export async function unlinkQuestion(dataDir: string): Promise<void> {
 	} catch {
 		/* 無檔 */
 	}
+}
+
+/** 驗證並正規化側欄歷史 JSON（陣列）。 */
+export function normalizePanelHistory(raw: unknown): PanelHistoryEntry[] {
+	if (!Array.isArray(raw)) return [];
+	const out: PanelHistoryEntry[] = [];
+	for (const item of raw) {
+		if (!item || typeof item !== "object") continue;
+		const row = item as Partial<PanelHistoryEntry>;
+		if (row.role !== "user" && row.role !== "assistant") continue;
+		if (typeof row.content !== "string" || !row.content.trim()) continue;
+		const ts = typeof row.ts === "number" ? row.ts : Date.now();
+		out.push({ role: row.role, content: row.content.trim(), ts });
+	}
+	return out;
+}
+
+/** 讀取 `history.json`；不存在或格式錯誤時回傳空陣列。 */
+export async function readPanelHistory(
+	dataDir: string
+): Promise<PanelHistoryEntry[]> {
+	const { historyFile } = getIpcPaths(dataDir);
+	try {
+		const raw = await fs.readFile(historyFile, "utf-8");
+		return normalizePanelHistory(JSON.parse(raw) as unknown);
+	} catch {
+		return [];
+	}
+}
+
+/** 覆寫 `history.json`（側欄對話歷史）。 */
+export async function writePanelHistory(
+	dataDir: string,
+	entries: PanelHistoryEntry[]
+): Promise<void> {
+	const { historyFile } = getIpcPaths(dataDir);
+	await ensureDataDir(dataDir);
+	await fs.writeFile(historyFile, JSON.stringify(entries, null, 2), "utf-8");
 }

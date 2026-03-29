@@ -118,6 +118,7 @@ sequenceDiagram
 | `question.json` | `ask_question` 寫入；側欄渲染 |
 | `answer.json` | 使用者提交後擴充寫入；MCP 讀取 |
 | `reply.json` | `check_messages` 的 `reply` 或 `send_progress` 的內容；側欄展示 |
+| `history.json` | 側欄對話歷史（擴充讀寫；與 MCP 佇列格式無關） |
 | `server.log` | MCP 除錯用（可選）；超過約 **1 MiB** 時自尾端截斷 |
 
 路徑必須對齊：**沒設好 `MESSENGER_DATA_DIR`，MCP 會用到程式內建 fallback 目錄，與擴充分離**，側欄和模型就會「各說各話」。
@@ -130,6 +131,7 @@ sequenceDiagram
 |--------------|----------------|
 | 側欄 UI、提交答案、postMessage | `src/webview/main.ts` |
 | Webview 註冊、推狀態、watcher、命令 | `src/extension.ts` |
+| 擴充 → 側欄 `state`（含 `history` 與 `history.json`） | `pushStateToPanel`（`src/extension.ts`）、`ExtensionPanelStateMessage`（`src/types/panel-messages.d.ts`） |
 | 讀寫 `queue.json` 等 | `src/ipc.ts`、`src/types/ipc-json.d.ts` |
 | 寫 `.cursor/mcp.json` | `src/mcp-config.ts` |
 | MCP 工具與輪詢邏輯 | `mcp-server/index.ts` |
