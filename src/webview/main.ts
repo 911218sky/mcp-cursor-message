@@ -4,6 +4,16 @@
  */
 import { strings, type UiLocale } from "./i18n";
 import { markdownToSafeHtml } from "./markdown";
+import {
+	DEFAULT_FONT_SIZE,
+	loadFontSizeSetting,
+	loadHistoryPanelCollapsed,
+	loadReplyPanelCollapsed,
+	saveFontSizeSetting,
+	saveHistoryPanelCollapsed,
+	saveReplyPanelCollapsed,
+	type FontSizeSetting,
+} from "./prefs";
 import type {
 	ExtensionPanelStateMessage,
 	PanelTokenStats,
@@ -19,8 +29,7 @@ declare function acquireVsCodeApi(): {
 
 const vscode = acquireVsCodeApi();
 
-/** sessionStorage 鍵：記住使用者上次停留在「內容」或「Token」分頁。 */
-const TAB_STORAGE_KEY = "mcpMessengerMainTab";
+const HISTORY_STORAGE_KEY = "mcpMessengerHistory";
 const DEFAULT_LOCALE: UiLocale = "en";
 const EMPTY_MARK = "—";
 const IMAGE_MIME_FALLBACK = "image/png";
@@ -34,6 +43,16 @@ type QueuePreviewItem = {
 	path?: string;
 	caption?: string;
 };
+type HistoryRole = "user" | "assistant";
+type HistoryEntry = {
+	role: HistoryRole;
+	content: string;
+	ts: number;
+};
+const HISTORY_COLLAPSE_MIN_CHARS = 260;
+const HISTORY_COLLAPSE_MIN_LINES = 6;
+/** AI 回覆超過此長度時預設折疊，避免卡片過高。 */
+const REPLY_COLLAPSE_MIN_CHARS = 380;
 
 /** 目前介面語系（由 extension 依設定推送；首次載入預設英文以符合擴充預設）。 */
 let uiLocale: UiLocale = DEFAULT_LOCALE;
@@ -45,36 +64,53 @@ let lastUiLanguageSetting: PanelUiLanguageSetting = "en";
 let pendingPastes: PendingPaste[] = [];
 let curQuestion: QuestionPayload | null = null;
 const selectedAnswers: Record<string, string[]> = {};
+/** UI 端本地對話歷史（不影響 MCP queue 格式）。 */
+let historyEntries: HistoryEntry[] = [];
+/** 用於避免同一則 reply 在 state 重推時重複寫入歷史。 */
+let lastSeenReplyContent = "";
+let isHistoryPanelCollapsed = false;
+let isReplyPanelCollapsed = false;
+/** Reply 卡片目前是否展開（僅前端顯示狀態）。 */
+let isReplyExpanded = false;
 
 function S() {
 	return strings(uiLocale);
 }
 
-/** 套用靜態 Chrome 文案（頂欄、分頁、輸入區等）；動態區塊由後續 render* 更新。 */
+/** 套用靜態 Chrome 文案（頂欄、輸入區等）；動態區塊由後續 render* 更新。 */
 function applyChrome(loc: UiLocale): void {
 	uiLocale = loc;
 	const t = S();
 	chromeTopbarTitle.textContent = t.topbarTitle;
 	chromeTopbarSub.innerHTML = t.topbarSubHtml;
-	chromeTabMain.textContent = t.tabMain;
-	chromeTabToken.textContent = t.tabToken;
 	chromeQuestionCardTitle.textContent = t.questionCardTitle;
 	chromeReplyTitle.textContent = t.replyCardTitle;
+	btnToggleReplyPanel.textContent = isReplyPanelCollapsed
+		? t.replyPanelExpand
+		: t.replyPanelCollapse;
 	replyAck.textContent = t.replyAck;
+	btnToggleReply.textContent = isReplyExpanded
+		? t.replyCollapse
+		: t.replyExpand;
+	chromeHistoryTitle.textContent = t.historyTitle;
+	btnClearHistory.textContent = t.historyClear;
+	btnToggleHistoryPanel.textContent = isHistoryPanelCollapsed
+		? t.historyPanelExpand
+		: t.historyPanelCollapse;
 	chromeQueueTitle.textContent = t.queueTitle;
-	chromeTokenCardTitle.textContent = t.tokenCardTitle;
-	chromeTokenHint.textContent = t.tokenHint;
-	chromeTokenTotalLabel.textContent = t.tokenTotal;
-	chromeTokenLastLabel.textContent = t.tokenLast;
-	btnResetTokens.textContent = t.tokenReset;
 	chromeComposerLabel.textContent = t.composerLabel;
 	chromeComposerHint.textContent = t.composerHint;
 	chromeBtnImageLabel.textContent = t.btnImage;
 	chromeBtnFileLabel.textContent = t.btnFile;
 	chromeComposerAttachHint.textContent = t.composerAttachHint;
 	chromeSendLabel.textContent = t.btnSend;
+	chromeSettingsBtn.textContent = t.settingsButton;
+	chromeSettingsTitle.textContent = t.settingsTitle;
+	btnCloseSettings.textContent = t.settingsClose;
 	msgInput.placeholder = t.placeholderInput;
 	updateLanguageSelect(lastUiLanguageSetting);
+	updateFontSizeSelect(currentFontSize);
+	renderTokenStats(lastTokenStats);
 }
 
 /** 頂欄語言選單文案與目前設定值。 */
@@ -87,25 +123,38 @@ function updateLanguageSelect(setting: PanelUiLanguageSetting): void {
 	uiLanguageSelect.value = setting;
 }
 
+/** 同步頂欄字級選單文案與目前值。 */
+function updateFontSizeSelect(setting: FontSizeSetting): void {
+	const t = S();
+	chromeFontSizeLabel.textContent = t.fontSizeLabel;
+	fontSizeSelect.options[0]!.textContent = t.fontSizeSm;
+	fontSizeSelect.options[1]!.textContent = t.fontSizeMd;
+	fontSizeSelect.options[2]!.textContent = t.fontSizeLg;
+	fontSizeSelect.value = setting;
+}
+
 /** 以 id 取得 DOM 節點（不存在時會拋錯，與面板 HTML 約定同步）。 */
 const $ = (id: string) => document.getElementById(id)!;
 
-/** 主內容/Token 分頁容器與頁籤按鈕。 */
+/** 主內容容器。 */
 const panelMain = $("panelMain");
-const panelToken = $("panelToken");
-const tabMain = $("tabMain");
-const tabToken = $("tabToken");
+const mainScroll = $("mainScroll");
 
 /** 問答與回覆卡片區塊。 */
 const questionCard = $("questionCard");
 const questionBody = $("questionBody");
 const replyCard = $("replyCard");
 const replyContent = $("replyContent");
+const btnToggleReply = $("btnToggleReply") as HTMLButtonElement;
+const btnToggleReplyPanel = $("btnToggleReplyPanel") as HTMLButtonElement;
+const historyList = $("historyList");
+const btnClearHistory = $("btnClearHistory") as HTMLButtonElement;
+const historyCard = btnClearHistory.closest(".card--history");
+const btnToggleHistoryPanel = $("btnToggleHistoryPanel") as HTMLButtonElement;
 
 /** 佇列預覽與 token 顯示區。 */
 const queuePreview = $("queuePreview");
-const tokenTotal = $("tokenTotal");
-const tokenLast = $("tokenLast");
+const tokenInline = $("tokenInline");
 
 /** 輸入與貼圖組件。 */
 const msgInput = $("msgInput") as HTMLTextAreaElement;
@@ -115,21 +164,19 @@ const composerPasteThumbs = $("composerPasteThumbs");
 
 /** 頂欄互動控制。 */
 const uiLanguageSelect = $("uiLanguageSelect") as HTMLSelectElement;
+const fontSizeSelect = $("fontSizeSelect") as HTMLSelectElement;
 const replyAck = $("replyAck");
-const btnResetTokens = $("btnResetTokens");
+const btnOpenSettings = $("btnOpenSettings") as HTMLButtonElement;
+const settingsDialog = $("settingsDialog");
+const btnCloseSettings = $("btnCloseSettings") as HTMLButtonElement;
 
 /** 靜態文案節點（由 applyChrome 依語系刷新）。 */
 const chromeTopbarTitle = $("chromeTopbarTitle");
 const chromeTopbarSub = $("chromeTopbarSub");
-const chromeTabMain = $("chromeTabMain");
-const chromeTabToken = $("chromeTabToken");
 const chromeQuestionCardTitle = $("chromeQuestionCardTitle");
 const chromeReplyTitle = $("chromeReplyTitle");
+const chromeHistoryTitle = $("chromeHistoryTitle");
 const chromeQueueTitle = $("chromeQueueTitle");
-const chromeTokenCardTitle = $("chromeTokenCardTitle");
-const chromeTokenHint = $("chromeTokenHint");
-const chromeTokenTotalLabel = $("chromeTokenTotalLabel");
-const chromeTokenLastLabel = $("chromeTokenLastLabel");
 const chromeComposerLabel = $("chromeComposerLabel");
 const chromeComposerHint = $("chromeComposerHint");
 const chromeBtnImageLabel = $("chromeBtnImageLabel");
@@ -137,33 +184,23 @@ const chromeBtnFileLabel = $("chromeBtnFileLabel");
 const chromeComposerAttachHint = $("chromeComposerAttachHint");
 const chromeSendLabel = $("chromeSendLabel");
 const chromeLangLabel = $("chromeLangLabel");
+const chromeFontSizeLabel = $("chromeFontSizeLabel");
+const chromeSettingsBtn = $("chromeSettingsBtn");
+const chromeSettingsTitle = $("chromeSettingsTitle");
+let currentFontSize: FontSizeSetting = DEFAULT_FONT_SIZE;
+let lastTokenStats: PanelTokenStats | undefined;
+const FONT_SCALE_MAP: Record<FontSizeSetting, string> = {
+	sm: "0.92",
+	md: "1",
+	lg: "1.1",
+};
 
-/** 主區「內容／Token（約略）」分頁切換，並寫入 sessionStorage 供下次開啟還原。 */
-function setMainTab(which: "main" | "token"): void {
-	const isMain = which === "main";
-	panelMain.classList.toggle("hidden", !isMain);
-	panelToken.classList.toggle("hidden", isMain);
-	tabMain.setAttribute("aria-selected", String(isMain));
-	tabToken.setAttribute("aria-selected", String(!isMain));
-	try {
-		sessionStorage.setItem(TAB_STORAGE_KEY, which);
-	} catch {
-		/* 部分環境可能禁用 storage */
-	}
-}
-
-/** 還原上次選中的主分頁，並綁定「內容／Token」切換。 */
-function initMainTabs(): void {
-	let initial: "main" | "token" = "main";
-	try {
-		const s = sessionStorage.getItem(TAB_STORAGE_KEY);
-		if (s === "token" || s === "main") initial = s;
-	} catch {
-		/* ignore */
-	}
-	setMainTab(initial);
-	tabMain.addEventListener("click", () => setMainTab("main"));
-	tabToken.addEventListener("click", () => setMainTab("token"));
+/** 套用字級到 `<body data-font-size>`，並持久化設定。 */
+function applyFontSize(setting: FontSizeSetting): void {
+	currentFontSize = setting;
+	document.body.setAttribute("data-font-size", setting);
+	document.body.style.setProperty("--mcp-ui-zoom", FONT_SCALE_MAP[setting]);
+	saveFontSizeSetting(setting);
 }
 
 /** 將字串轉為可安全插入 HTML 的文字（防 XSS）。 */
@@ -174,11 +211,13 @@ function esc(s: string): string {
 		.replace(/>/g, "&gt;");
 }
 
+/** 隱藏問答卡並清除當前題目狀態。 */
 function hideQuestionCard(): void {
 	questionCard.classList.add("hidden");
 	curQuestion = null;
 }
 
+/** 取得指定題目的「其他補充」輸入框。 */
 function getQuestionOtherInput(questionId: string): HTMLInputElement | null {
 	return document.querySelector(
 		QUESTION_OTHER_SELECTOR.replace("%QID%", questionId)
@@ -277,11 +316,148 @@ function renderReply(content: string | undefined): void {
 		replyCard.classList.add("hidden");
 		replyContent.innerHTML = "";
 		replyContent.classList.remove("reply-content--md");
+		replyContent.classList.remove("is-collapsed");
+		btnToggleReply.classList.add("hidden");
+		isReplyExpanded = false;
 		return;
 	}
+	// 長回覆預設折疊，讓使用者先看到歷史與最新訊息。
+	const shouldCollapse = content.length > REPLY_COLLAPSE_MIN_CHARS;
+	if (!shouldCollapse) isReplyExpanded = false;
 	replyContent.classList.add("reply-content--md");
 	replyContent.innerHTML = markdownToSafeHtml(content);
+	replyContent.classList.toggle("is-collapsed", shouldCollapse && !isReplyExpanded);
+	btnToggleReply.classList.toggle("hidden", !shouldCollapse);
+	if (shouldCollapse) {
+		const tr = S();
+		btnToggleReply.textContent = isReplyExpanded
+			? tr.replyCollapse
+			: tr.replyExpand;
+		btnToggleReply.setAttribute("aria-expanded", String(isReplyExpanded));
+	}
 	replyCard.classList.remove("hidden");
+	replyCard.classList.toggle("is-collapsed", isReplyPanelCollapsed);
+}
+
+/** 讀取歷史（localStorage），資料異常時退回空陣列。 */
+function loadHistory(): HistoryEntry[] {
+	try {
+		const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+		if (!raw) return [];
+		const parsed = JSON.parse(raw) as unknown;
+		if (!Array.isArray(parsed)) return [];
+		const next = parsed
+			.map((item): HistoryEntry | null => {
+				if (!item || typeof item !== "object") return null;
+				const row = item as Partial<HistoryEntry>;
+				if (row.role !== "user" && row.role !== "assistant") return null;
+				if (typeof row.content !== "string" || !row.content.trim()) return null;
+				const ts = typeof row.ts === "number" ? row.ts : Date.now();
+				return { role: row.role, content: row.content, ts };
+			})
+			.filter((row): row is HistoryEntry => row !== null);
+		return next;
+	} catch {
+		return [];
+	}
+}
+
+/** 寫回歷史（localStorage），失敗時靜默略過。 */
+function saveHistory(): void {
+	try {
+		localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyEntries));
+	} catch {
+		/* ignore storage errors */
+	}
+}
+
+/** 重繪歷史並保留目前捲動位置，避免新增訊息時畫面跳動。 */
+function renderHistory(): void {
+	const tr = S();
+	const prevScrollTop = mainScroll.scrollTop;
+	if (historyEntries.length === 0) {
+		historyList.innerHTML = `<p class="muted">${esc(tr.historyEmpty)}</p>`;
+		mainScroll.scrollTop = prevScrollTop;
+		return;
+	}
+	const html = historyEntries
+		.map((item) => {
+			const who =
+				item.role === "user" ? esc(tr.historyUserLabel) : esc(tr.historyAiLabel);
+			const longByChars = item.content.length > HISTORY_COLLAPSE_MIN_CHARS;
+			const longByLines =
+				item.content.split(/\r?\n/).filter((line) => line.trim().length > 0).length >
+				HISTORY_COLLAPSE_MIN_LINES;
+			const shouldCollapse = longByChars || longByLines;
+			const body =
+				item.role === "assistant"
+					? markdownToSafeHtml(item.content)
+					: esc(item.content).replace(/\n/g, "<br>");
+			const bodyClass = shouldCollapse
+				? "history-item-body is-collapsed"
+				: "history-item-body";
+			const toggleBtn = shouldCollapse
+				? `<button type="button" class="history-toggle" data-expanded="false" aria-expanded="false">${esc(tr.historyExpand)}</button>`
+				: "";
+			return `<div class="history-item history-item--${item.role}"><div class="history-item-head">${who}</div><div class="${bodyClass}">${body}</div>${toggleBtn}</div>`;
+		})
+		.join("");
+	historyList.innerHTML = html;
+	mainScroll.scrollTop = prevScrollTop;
+}
+
+/** 新增歷史訊息後自動捲到底，預設顯示最新內容。 */
+function scrollHistoryToBottom(): void {
+	historyList.scrollTop = historyList.scrollHeight;
+}
+
+/** 切換「整個歷史卡片」展開/收合，並記住本次 session 狀態。 */
+function setHistoryPanelCollapsed(next: boolean): void {
+	isHistoryPanelCollapsed = next;
+	historyCard?.classList.toggle("is-collapsed", next);
+	const tr = S();
+	btnToggleHistoryPanel.setAttribute("aria-expanded", String(!next));
+	btnToggleHistoryPanel.textContent = next
+		? tr.historyPanelExpand
+		: tr.historyPanelCollapse;
+	saveHistoryPanelCollapsed(next);
+}
+
+function setReplyPanelCollapsed(next: boolean): void {
+	isReplyPanelCollapsed = next;
+	replyCard.classList.toggle("is-collapsed", next);
+	const tr = S();
+	btnToggleReplyPanel.setAttribute("aria-expanded", String(!next));
+	btnToggleReplyPanel.textContent = next
+		? tr.replyPanelExpand
+		: tr.replyPanelCollapse;
+	saveReplyPanelCollapsed(next);
+}
+
+historyList.addEventListener("click", (ev) => {
+	const target = ev.target as HTMLElement | null;
+	const btn = target?.closest?.(".history-toggle") as HTMLButtonElement | null;
+	if (!btn) return;
+	const item = btn.closest(".history-item");
+	const body = item?.querySelector(".history-item-body");
+	if (!(body instanceof HTMLElement)) return;
+	const tr = S();
+	const isExpanded = btn.getAttribute("data-expanded") === "true";
+	const nextExpanded = !isExpanded;
+	body.classList.toggle("is-collapsed", !nextExpanded);
+	btn.setAttribute("data-expanded", String(nextExpanded));
+	btn.setAttribute("aria-expanded", String(nextExpanded));
+	btn.textContent = nextExpanded ? tr.historyCollapse : tr.historyExpand;
+});
+
+/** 追加一筆歷史（你/AI），並立即持久化與更新畫面。 */
+function appendHistory(role: HistoryRole, content: string): void {
+	const text = content.trim();
+	if (!text) return;
+	historyEntries.push({ role, content: text, ts: Date.now() });
+	saveHistory();
+	renderHistory();
+	scrollHistoryToBottom();
 }
 
 /** 將佇列預覽為簡短列表（文字截斷、圖片／檔案標籤）。 */
@@ -311,16 +487,18 @@ function renderQueuePreview(queue: unknown): void {
 
 /** 顯示側欄送入佇列之 token 約略累計（由擴充估算，非 Cursor 帳單實值）。 */
 function renderTokenStats(ts: PanelTokenStats | undefined): void {
+	lastTokenStats = ts;
+	const t = S();
 	if (!ts || typeof ts.totalEstimated !== "number") {
-		tokenTotal.textContent = EMPTY_MARK;
-		tokenLast.textContent = EMPTY_MARK;
+		tokenInline.textContent = t.tokenInlineOnly.replace("{total}", EMPTY_MARK);
 		return;
 	}
-	tokenTotal.textContent = String(ts.totalEstimated);
-	tokenLast.textContent =
+	const total = String(ts.totalEstimated);
+	const last =
 		typeof ts.lastMessageEstimated === "number"
 			? String(ts.lastMessageEstimated)
 			: EMPTY_MARK;
+	tokenInline.textContent = t.tokenInline.replace("{total}", total).replace("{last}", last);
 }
 
 /**
@@ -336,6 +514,14 @@ window.addEventListener("message", (ev) => {
 	applyChrome(m.uiLocale);
 	renderQuestion((m.question as QuestionPayload | null) ?? null);
 	renderReply(m.reply?.content);
+	const incomingReply = (m.reply?.content ?? "").trim();
+	if (incomingReply && incomingReply !== lastSeenReplyContent) {
+		const last = historyEntries[historyEntries.length - 1];
+		if (!last || last.role !== "assistant" || last.content !== incomingReply) {
+			appendHistory("assistant", incomingReply);
+		}
+	}
+	lastSeenReplyContent = incomingReply;
 	renderQueuePreview(m.queue);
 	renderTokenStats(m.tokenStats);
 });
@@ -428,8 +614,17 @@ msgInput.addEventListener("keydown", (e) => {
 /** 讀取輸入框／暫存貼圖並送至擴充，成功後清空。 */
 function doSend(): void {
 	const text = msgInput.value.trim();
+	const tr = S();
 	if (pendingPastes.length === 0 && !text) return;
 	if (pendingPastes.length > 0) {
+		const imageNote = tr.historyImageNote.replace(
+			"{count}",
+			String(pendingPastes.length)
+		);
+		appendHistory(
+			"user",
+			text ? `${text}\n${imageNote}` : imageNote
+		);
 		vscode.postMessage({
 			type: "sendComposer",
 			text,
@@ -440,6 +635,7 @@ function doSend(): void {
 		});
 		clearPendingPaste();
 	} else {
+		appendHistory("user", text);
 		vscode.postMessage({ type: "sendText", text });
 	}
 	msgInput.value = "";
@@ -461,8 +657,41 @@ replyAck.addEventListener("click", () => {
 	replyCard.classList.add("hidden");
 });
 
-btnResetTokens.addEventListener("click", () => {
-	vscode.postMessage({ type: "resetTokenStats" });
+btnToggleReply.addEventListener("click", () => {
+	isReplyExpanded = !isReplyExpanded;
+	const tr = S();
+	replyContent.classList.toggle("is-collapsed", !isReplyExpanded);
+	btnToggleReply.textContent = isReplyExpanded
+		? tr.replyCollapse
+		: tr.replyExpand;
+	btnToggleReply.setAttribute("aria-expanded", String(isReplyExpanded));
+});
+
+btnClearHistory.addEventListener("click", () => {
+	historyEntries = [];
+	lastSeenReplyContent = "";
+	saveHistory();
+	renderHistory();
+});
+
+btnToggleHistoryPanel.addEventListener("click", () => {
+	setHistoryPanelCollapsed(!isHistoryPanelCollapsed);
+});
+
+btnToggleReplyPanel.addEventListener("click", () => {
+	setReplyPanelCollapsed(!isReplyPanelCollapsed);
+});
+
+btnOpenSettings.addEventListener("click", () => {
+	settingsDialog.classList.remove("hidden");
+});
+
+btnCloseSettings.addEventListener("click", () => {
+	settingsDialog.classList.add("hidden");
+});
+
+settingsDialog.addEventListener("click", (ev) => {
+	if (ev.target === settingsDialog) settingsDialog.classList.add("hidden");
 });
 
 /** 佇列預覽列：事件委派至 `.qp-remove`，避免每次重繪佇列時重綁多顆按鈕。 */
@@ -476,7 +705,21 @@ queuePreview.addEventListener("click", (e) => {
 	vscode.postMessage({ type: "removeQueueItem", index: idx });
 });
 
-initMainTabs();
+panelMain.classList.remove("hidden");
+isHistoryPanelCollapsed = loadHistoryPanelCollapsed();
+setHistoryPanelCollapsed(isHistoryPanelCollapsed);
+isReplyPanelCollapsed = loadReplyPanelCollapsed();
+setReplyPanelCollapsed(isReplyPanelCollapsed);
+historyEntries = loadHistory();
+for (let i = historyEntries.length - 1; i >= 0; i--) {
+	const row = historyEntries[i];
+	if (row.role === "assistant") {
+		lastSeenReplyContent = row.content;
+		break;
+	}
+}
+renderHistory();
+scrollHistoryToBottom();
 
 /** 暫存貼圖列：移除單張預覽（僅前端狀態，未送出前可刪）。 */
 composerPasteStrip.addEventListener("click", (ev) => {
@@ -498,6 +741,15 @@ uiLanguageSelect.addEventListener("change", () => {
 	}
 });
 
+fontSizeSelect.addEventListener("change", () => {
+	const v = fontSizeSelect.value;
+	if (v === "sm" || v === "md" || v === "lg") {
+		applyFontSize(v);
+		updateFontSizeSelect(v);
+	}
+});
+
+applyFontSize(loadFontSizeSetting());
 applyChrome(uiLocale);
 
 /** Webview 載入完成後通知擴充，觸發首次 `pushState`。 */

@@ -11,7 +11,21 @@ export type UiStrings = {
 	tabToken: string;
 	questionCardTitle: string;
 	replyCardTitle: string;
+	replyPanelExpand: string;
+	replyPanelCollapse: string;
 	replyAck: string;
+	replyExpand: string;
+	replyCollapse: string;
+	historyTitle: string;
+	historyClear: string;
+	historyPanelExpand: string;
+	historyPanelCollapse: string;
+	historyEmpty: string;
+	historyUserLabel: string;
+	historyAiLabel: string;
+	historyExpand: string;
+	historyCollapse: string;
+	historyImageNote: string;
 	queueTitle: string;
 	queueEmpty: string;
 	tokenCardTitle: string;
@@ -19,6 +33,8 @@ export type UiStrings = {
 	tokenTotal: string;
 	tokenLast: string;
 	tokenReset: string;
+	tokenInline: string;
+	tokenInlineOnly: string;
 	composerLabel: string;
 	composerHint: string;
 	btnImage: string;
@@ -39,6 +55,16 @@ export type UiStrings = {
 	langOptEn: string;
 	langOptZh: string;
 	langOptAuto: string;
+	fontSizeLabel: string;
+	fontSizeSm: string;
+	fontSizeMd: string;
+	fontSizeLg: string;
+	settingsButton: string;
+	settingsTitle: string;
+	settingsClose: string;
+	replyDefaultLabel: string;
+	replyDefaultShow: string;
+	replyDefaultHide: string;
 	/** 移除輸入區暫存貼圖（aria） */
 	pendingPasteRemoveAria: string;
 };
@@ -51,7 +77,21 @@ export const UI: Record<UiLocale, UiStrings> = {
 		tabToken: "Token",
 		questionCardTitle: "需要你的選擇",
 		replyCardTitle: "AI 回覆",
+		replyPanelExpand: "顯示回覆",
+		replyPanelCollapse: "隱藏回覆",
 		replyAck: "已閱",
+		replyExpand: "展開回覆",
+		replyCollapse: "收合回覆",
+		historyTitle: "對話歷史",
+		historyClear: "清除全部",
+		historyPanelExpand: "展開歷史",
+		historyPanelCollapse: "收合歷史",
+		historyEmpty: "目前沒有歷史訊息",
+		historyUserLabel: "你",
+		historyAiLabel: "AI",
+		historyExpand: "展開",
+		historyCollapse: "收合",
+		historyImageNote: "[圖片 {count} 張]",
 		queueTitle: "待送佇列",
 		queueEmpty: "佇列為空",
 		tokenCardTitle: "佇列 Token（約略）",
@@ -60,6 +100,8 @@ export const UI: Record<UiLocale, UiStrings> = {
 		tokenTotal: "累計",
 		tokenLast: "上一則",
 		tokenReset: "重設統計",
+		tokenInline: "Token：總計 {total} · 上一則 {last}",
+		tokenInlineOnly: "Token：總計 {total}",
 		composerLabel: "傳給 AI",
 		composerHint:
 			"Enter 送出 · Shift+Enter 換行 · 貼圖會先暫存，按「送出」才送出",
@@ -81,6 +123,16 @@ export const UI: Record<UiLocale, UiStrings> = {
 		langOptEn: "English",
 		langOptZh: "繁體中文",
 		langOptAuto: "自動（編輯器）",
+		fontSizeLabel: "字級",
+		fontSizeSm: "小",
+		fontSizeMd: "中",
+		fontSizeLg: "大",
+		settingsButton: "設定",
+		settingsTitle: "設定",
+		settingsClose: "關閉",
+		replyDefaultLabel: "回覆卡",
+		replyDefaultShow: "預設顯示",
+		replyDefaultHide: "預設隱藏",
 		pendingPasteRemoveAria: "移除暫存圖片",
 	},
 	en: {
@@ -90,7 +142,21 @@ export const UI: Record<UiLocale, UiStrings> = {
 		tabToken: "Token",
 		questionCardTitle: "Your choice needed",
 		replyCardTitle: "AI reply",
+		replyPanelExpand: "Show reply",
+		replyPanelCollapse: "Hide reply",
 		replyAck: "Dismiss",
+		replyExpand: "Expand reply",
+		replyCollapse: "Collapse reply",
+		historyTitle: "Conversation history",
+		historyClear: "Clear all",
+		historyPanelExpand: "Show history",
+		historyPanelCollapse: "Hide history",
+		historyEmpty: "No history yet",
+		historyUserLabel: "You",
+		historyAiLabel: "AI",
+		historyExpand: "Expand",
+		historyCollapse: "Collapse",
+		historyImageNote: "[{count} image(s)]",
 		queueTitle: "Outbound queue",
 		queueEmpty: "Queue is empty",
 		tokenCardTitle: "Queue tokens (estimate)",
@@ -99,6 +165,8 @@ export const UI: Record<UiLocale, UiStrings> = {
 		tokenTotal: "Total",
 		tokenLast: "Last",
 		tokenReset: "Reset stats",
+		tokenInline: "Token: total {total} · last {last}",
+		tokenInlineOnly: "Token: total {total}",
 		composerLabel: "To AI",
 		composerHint:
 			"Enter to send · Shift+Enter newline · pasted images stay until you press Send",
@@ -120,6 +188,16 @@ export const UI: Record<UiLocale, UiStrings> = {
 		langOptEn: "English",
 		langOptZh: "繁體中文",
 		langOptAuto: "Auto (editor)",
+		fontSizeLabel: "Text",
+		fontSizeSm: "Small",
+		fontSizeMd: "Medium",
+		fontSizeLg: "Large",
+		settingsButton: "Settings",
+		settingsTitle: "Settings",
+		settingsClose: "Close",
+		replyDefaultLabel: "Reply card",
+		replyDefaultShow: "Default show",
+		replyDefaultHide: "Default hide",
 		pendingPasteRemoveAria: "Remove staged image",
 	},
 };

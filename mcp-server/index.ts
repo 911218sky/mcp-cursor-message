@@ -72,6 +72,18 @@ const questionItemSchema = z.object({
 	allow_multiple: z.boolean().default(false).describe("是否允許多選"),
 });
 
+/**
+ * 某些 MCP 客戶端會把輸入包成 `{ arguments: {...} }`。
+ * 這裡做相容解包，避免 reply/progress/questions 被包一層而讀不到。
+ */
+function unwrapToolInput<T extends Record<string, unknown>>(raw: unknown): Partial<T> {
+	if (!raw || typeof raw !== "object") return {};
+	const record = raw as Record<string, unknown>;
+	const nested = record.arguments;
+	if (!nested || typeof nested !== "object") return record as Partial<T>;
+	return { ...(record as Partial<T>), ...(nested as Partial<T>) };
+}
+
 // --- 佇列與訊息轉換 -------------------------------------------------------
 
 /** 建立 IPC 目錄（與擴充寫入路徑須一致）。 */
@@ -352,7 +364,8 @@ function registerCheckMessages(server: McpServer): void {
 					.describe("本輪完整回覆內容（支援 Markdown），將推送到外掛介面展示給使用者"),
 			},
 		},
-		async ({ reply }, extra) => {
+		async (rawInput, extra) => {
+			const { reply } = unwrapToolInput<typeof rawInput>(rawInput);
 			await ensureDataDir();
 			await appendServerLog("info", "check_messages started");
 
@@ -451,7 +464,19 @@ function registerSendProgress(server: McpServer): void {
 					.describe("進度摘要（支援 Markdown），將推送到外掛側欄"),
 			},
 		},
-		async ({ progress }) => {
+		async (rawInput) => {
+			const { progress } = unwrapToolInput<typeof rawInput>(rawInput);
+			if (!progress) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: "[system] send_progress 缺少 progress 參數，請重新呼叫並帶入文字摘要。",
+						},
+					],
+					isError: true,
+				};
+			}
 			await ensureDataDir();
 			await fs.writeFile(
 				REPLY_FILE,
@@ -490,7 +515,19 @@ function registerAskQuestion(server: McpServer): void {
 					.describe("問題列表，可同時提出多題"),
 			},
 		},
-		async ({ questions }, extra) => {
+		async (rawInput, extra) => {
+			const { questions } = unwrapToolInput<typeof rawInput>(rawInput);
+			if (!questions || questions.length === 0) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: "[system] ask_question 缺少 questions 參數，請重新呼叫並提供問題列表。",
+						},
+					],
+					isError: true,
+				};
+			}
 			await ensureDataDir();
 			await appendServerLog("info", "ask_question started");
 

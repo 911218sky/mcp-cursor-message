@@ -11,6 +11,7 @@
 	<link rel="stylesheet" href="{{STYLE_URI}}" />
 </head>
 <body class="app">
+	<div class="app-shell">
 	<header class="topbar" aria-label="Header">
 		<div class="topbar-accent" aria-hidden="true"></div>
 		<div class="topbar-inner">
@@ -41,63 +42,16 @@
 					</p>
 				</div>
 			</div>
-			<div class="topbar-lang" id="chromeLangWrap">
-				<label class="topbar-lang-label" for="uiLanguageSelect" id="chromeLangLabel">Language</label>
-				<select
-					id="uiLanguageSelect"
-					class="topbar-lang-select"
-					aria-labelledby="chromeLangLabel"
-				>
-					<option value="en">English</option>
-					<option value="zh">繁體中文</option>
-					<option value="auto">Auto</option>
-				</select>
+			<div class="topbar-controls">
+				<button id="btnOpenSettings" class="topbar-settings-btn" type="button">
+					<span id="chromeSettingsBtn">Settings</span>
+				</button>
 			</div>
 		</div>
 	</header>
 
 	<main class="scroll" id="mainScroll">
-		<div class="main-tabs" role="tablist" aria-label="Main tabs">
-			<button
-				type="button"
-				class="main-tab"
-				role="tab"
-				id="tabMain"
-				aria-selected="true"
-				aria-controls="panelMain"
-			>
-				<svg class="main-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-					<path
-						d="M4 6h16M4 12h10M4 18h14"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-					/>
-				</svg>
-				<span class="main-tab-text" id="chromeTabMain">Content</span>
-			</button>
-			<button
-				type="button"
-				class="main-tab"
-				role="tab"
-				id="tabToken"
-				aria-selected="false"
-				aria-controls="panelToken"
-			>
-				<svg class="main-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-					<path
-						d="M7 7h10M7 12h6M7 17h10"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-					/>
-					<circle cx="17" cy="7" r="2" fill="currentColor" />
-				</svg>
-				<span class="main-tab-text" id="chromeTabToken">Token</span>
-			</button>
-		</div>
-
-		<div id="panelMain" class="main-tab-panel" role="tabpanel" aria-labelledby="tabMain">
+		<div id="panelMain" class="main-tab-panel">
 		<div id="questionCard" class="card card--question hidden">
 			<div class="card-head">
 				<span class="card-icon card-icon--q" aria-hidden="true"></span>
@@ -108,12 +62,30 @@
 
 		<div id="replyCard" class="card card--reply hidden">
 			<div class="card-head">
-				<span class="card-icon card-icon--reply" aria-hidden="true"></span>
-				<div class="card-title" id="chromeReplyTitle">AI reply summary</div>
+				<div class="card-head-main">
+					<span class="card-icon card-icon--reply" aria-hidden="true"></span>
+					<div class="card-title" id="chromeReplyTitle">AI reply summary</div>
+				</div>
+				<button id="btnToggleReplyPanel" class="history-panel-toggle" type="button">Hide reply</button>
 			</div>
 			<div id="replyContent" class="reply-content"></div>
+			<button id="btnToggleReply" class="reply-toggle hidden" type="button">Expand</button>
 			<button id="replyAck" class="btn btn-ghost btn-block" type="button">
 				Dismiss
+			</button>
+		</div>
+
+		<div class="card card--history">
+			<div class="card-head">
+				<div class="card-head-main">
+					<span class="card-icon card-icon--history" aria-hidden="true"></span>
+					<div class="card-title" id="chromeHistoryTitle">Conversation history</div>
+				</div>
+				<button id="btnToggleHistoryPanel" class="history-panel-toggle" type="button">Collapse</button>
+			</div>
+			<div id="historyList" class="history-list"></div>
+			<button id="btnClearHistory" class="btn btn-ghost btn-block" type="button">
+				Clear history
 			</button>
 		</div>
 
@@ -124,36 +96,6 @@
 			</div>
 			<div id="queuePreview" class="queue-preview"></div>
 		</div>
-		</div>
-
-		<div
-			id="panelToken"
-			class="main-tab-panel hidden"
-			role="tabpanel"
-			aria-labelledby="tabToken"
-		>
-			<section class="card card--token" aria-label="Approximate queue token stats">
-				<div class="card-head">
-					<span class="card-icon card-icon--tok" aria-hidden="true"></span>
-					<div class="card-title" id="chromeTokenCardTitle">Queue tokens (estimate)</div>
-				</div>
-				<p class="token-hint" id="chromeTokenHint">
-					Approximate tokens for sidebar-queued text/images/files—not Cursor billing.
-				</p>
-				<div class="token-grid">
-					<div class="token-cell">
-						<span class="token-label" id="chromeTokenTotalLabel">Total</span>
-						<strong class="token-val" id="tokenTotal">—</strong>
-					</div>
-					<div class="token-cell">
-						<span class="token-label" id="chromeTokenLastLabel">Last</span>
-						<strong class="token-val" id="tokenLast">—</strong>
-					</div>
-				</div>
-				<button type="button" class="btn btn-ghost btn-block token-reset-btn" id="btnResetTokens">
-					Reset stats
-				</button>
-			</section>
 		</div>
 	</main>
 
@@ -221,6 +163,7 @@
 				<span class="hint" aria-hidden="true" id="chromeComposerAttachHint"
 					>Pick attachments · Ctrl+V paste image in box</span
 				>
+				<span class="hint token-inline" id="tokenInline">Token: —</span>
 				<button id="sendBtn" class="btn btn-primary btn-send" type="button" disabled>
 					<svg class="btn-send-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 						<path
@@ -236,6 +179,39 @@
 			</div>
 		</div>
 	</footer>
+	</div>
+	<div id="settingsDialog" class="settings-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="chromeSettingsTitle">
+		<div class="settings-card">
+			<div class="settings-head">
+				<div class="card-title" id="chromeSettingsTitle">Settings</div>
+				<button id="btnCloseSettings" class="history-panel-toggle" type="button">Close</button>
+			</div>
+			<div class="topbar-control">
+				<label class="topbar-lang-label" for="fontSizeSelect" id="chromeFontSizeLabel">Text</label>
+				<select
+					id="fontSizeSelect"
+					class="topbar-lang-select"
+					aria-labelledby="chromeFontSizeLabel"
+				>
+					<option value="sm">Small</option>
+					<option value="md">Medium</option>
+					<option value="lg">Large</option>
+				</select>
+			</div>
+			<div class="topbar-control" id="chromeLangWrap">
+				<label class="topbar-lang-label" for="uiLanguageSelect" id="chromeLangLabel">Language</label>
+				<select
+					id="uiLanguageSelect"
+					class="topbar-lang-select"
+					aria-labelledby="chromeLangLabel"
+				>
+					<option value="en">English</option>
+					<option value="zh">繁體中文</option>
+					<option value="auto">Auto</option>
+				</select>
+			</div>
+		</div>
+	</div>
 
 	<script nonce="{{NONCE}}" src="{{SCRIPT_URI}}"></script>
 </body>

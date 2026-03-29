@@ -34,6 +34,7 @@
 		sans-serif
 	);
 	--mcp-font-mono: var(--vscode-editor-font-family, "Cascadia Code", ui-monospace, monospace);
+	--mcp-font-size-base: 13px;
 }
 
 @supports not (color: color-mix(in srgb, red, blue)) {
@@ -59,12 +60,8 @@ body {
 }
 
 body.app {
-	display: flex;
-	flex-direction: column;
-	min-height: 100%;
-	max-height: 100%;
 	font-family: var(--mcp-font-ui);
-	font-size: 13px;
+	font-size: var(--mcp-font-size-base);
 	line-height: 1.55;
 	letter-spacing: -0.012em;
 	color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
@@ -94,6 +91,26 @@ body.app {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	font-feature-settings: "kern" 1, "liga" 1;
+}
+
+.app-shell {
+	display: flex;
+	flex-direction: column;
+	min-height: 100%;
+	max-height: 100%;
+	zoom: var(--mcp-ui-zoom, 1);
+}
+
+body.app[data-font-size="sm"] {
+	--mcp-font-size-base: 12px;
+}
+
+body.app[data-font-size="md"] {
+	--mcp-font-size-base: 13px;
+}
+
+body.app[data-font-size="lg"] {
+	--mcp-font-size-base: 14px;
 }
 
 /* —— 頂部 —— */
@@ -129,24 +146,46 @@ body.app {
 	flex-direction: row;
 	align-items: flex-start;
 	justify-content: space-between;
-	gap: 10px;
-	padding: 12px 13px 11px;
+	gap: 8px;
+	padding: 9px 11px 8px;
 	position: relative;
 	z-index: 1;
 }
 
-.topbar-lang {
+.topbar-controls {
 	flex-shrink: 0;
 	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 7px;
+	max-width: 40%;
+}
+
+.topbar-settings-btn {
+	padding: 5px 10px;
+	border-radius: var(--mcp-radius-sm);
+	border: 1px solid var(--mcp-border-soft);
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	color: var(--vscode-foreground);
+	font-family: inherit;
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.topbar-settings-btn:hover {
+	background: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.08));
+}
+
+.topbar-control {
+	display: flex;
 	flex-direction: column;
-	align-items: flex-end;
-	gap: 4px;
-	padding-top: 2px;
-	max-width: 42%;
+	gap: 3px;
+	min-width: 0;
 }
 
 .topbar-lang-label {
-	font-size: 10px;
+	font-size: 9.5px;
 	font-weight: 600;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
@@ -160,9 +199,9 @@ body.app {
 
 .topbar-lang-select {
 	font-family: var(--mcp-font-ui);
-	font-size: 12px;
+	font-size: 11px;
 	line-height: 1.35;
-	padding: 5px 28px 5px 8px;
+	padding: 4px 24px 4px 7px;
 	min-width: 0;
 	max-width: 100%;
 	border-radius: var(--mcp-radius-sm);
@@ -198,9 +237,9 @@ body.app {
 }
 
 .topbar-logo {
-	width: 42px;
-	height: 42px;
-	border-radius: 14px;
+	width: 34px;
+	height: 34px;
+	border-radius: 10px;
 	flex-shrink: 0;
 	display: grid;
 	place-items: center;
@@ -216,8 +255,8 @@ body.app {
 }
 
 .topbar-logo-svg {
-	width: 22px;
-	height: 22px;
+	width: 18px;
+	height: 18px;
 	display: block;
 	filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
 }
@@ -239,7 +278,7 @@ body.app {
 }
 
 .topbar-title {
-	font-size: 15px;
+	font-size: 13px;
 	font-weight: 620;
 	letter-spacing: -0.04em;
 	color: var(--vscode-sideBarTitle-foreground, inherit);
@@ -272,7 +311,7 @@ body.app {
 
 .topbar-sub {
 	margin: 0;
-	font-size: 10.5px;
+	font-size: 10px;
 	line-height: 1.5;
 	color: var(--vscode-descriptionForeground, rgba(200, 200, 200, 0.72));
 	word-break: break-word;
@@ -282,8 +321,8 @@ body.app {
 	font-family: var(--mcp-font-mono);
 	font-size: 10px;
 	font-weight: 500;
-	padding: 3px 7px;
-	border-radius: 6px;
+	padding: 3px 9px;
+	border-radius: 999px;
 	background: color-mix(in srgb, var(--vscode-textCodeBlock-background, rgba(80, 80, 80, 0.35)) 100%, transparent);
 	color: var(--vscode-textPreformat-foreground, var(--mcp-accent-hi));
 	border: 1px solid var(--mcp-border-soft);
@@ -295,10 +334,10 @@ body.app {
 	min-height: 0;
 	overflow-y: auto;
 	overflow-x: hidden;
-	padding: 12px 11px 14px;
+	padding: 8px 9px 10px;
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 8px;
 	/* 隱藏捲動條外觀，仍可用滾輪／觸控捲動（節省橫向空間、較簡潔） */
 	scrollbar-width: none;
 	-ms-overflow-style: none;
@@ -309,78 +348,10 @@ body.app {
 	height: 0;
 }
 
-/* —— 主區分頁（緊湊：減少側欄垂直佔用） —— */
-.main-tabs {
-	display: flex;
-	gap: 3px;
-	flex-shrink: 0;
-	padding: 3px;
-	border-radius: var(--mcp-radius-lg);
-	background: color-mix(in srgb, var(--vscode-foreground) 5.5%, transparent);
-	border: 1px solid var(--mcp-border-soft);
-	box-shadow:
-		0 1px 0 rgba(255, 255, 255, 0.04) inset,
-		0 -1px 0 rgba(0, 0, 0, 0.06) inset;
-}
-
-.main-tab {
-	flex: 1;
-	min-width: 0;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 5px;
-	padding: 5px 8px;
-	border: none;
-	border-radius: calc(var(--mcp-radius-lg) - 3px);
-	font: inherit;
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: -0.015em;
-	color: var(--vscode-descriptionForeground, #aaa);
-	background: transparent;
-	cursor: pointer;
-	transition:
-		background 0.22s var(--mcp-ease-soft),
-		color 0.22s var(--mcp-ease-soft),
-		box-shadow 0.22s var(--mcp-ease-soft),
-		transform 0.15s var(--mcp-ease-out);
-}
-
-.main-tab-icon {
-	flex-shrink: 0;
-	width: 12px;
-	height: 12px;
-	opacity: 0.72;
-	transition: opacity 0.15s ease;
-}
-
-.main-tab[aria-selected="true"] .main-tab-icon {
-	opacity: 1;
-}
-
-.main-tab:hover {
-	color: var(--vscode-foreground);
-}
-
-.main-tab[aria-selected="true"] {
-	color: var(--vscode-foreground);
-	background: color-mix(in srgb, var(--mcp-surface-elevated) 100%, transparent);
-	box-shadow:
-		0 2px 8px rgba(0, 0, 0, 0.08),
-		0 0 0 1px color-mix(in srgb, var(--vscode-foreground) 8%, transparent),
-		0 1px 0 rgba(255, 255, 255, 0.06) inset;
-}
-
-.main-tab:focus-visible {
-	outline: 2px solid var(--vscode-focusBorder, #007fd4);
-	outline-offset: 2px;
-}
-
 .main-tab-panel {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: 7px;
 	min-width: 0;
 }
 
@@ -392,10 +363,10 @@ body.app {
 .card {
 	position: relative;
 	border: 1px solid color-mix(in srgb, var(--mcp-border) 45%, transparent);
-	border-radius: var(--mcp-radius-lg);
-	padding: 12px 12px 12px;
-	background: color-mix(in srgb, var(--mcp-surface-2) 78%, var(--mcp-surface-0) 22%);
-	box-shadow: var(--mcp-shadow-sm);
+	border-radius: 11px;
+	padding: 8px 9px;
+	background: color-mix(in srgb, var(--mcp-surface-2) 44%, transparent);
+	box-shadow: none;
 }
 
 .card::before {
@@ -416,14 +387,22 @@ body.app {
 .card-head {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
 	gap: 8px;
-	margin-bottom: 9px;
+	margin-bottom: 7px;
+}
+
+.card-head-main {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
 }
 
 .card-icon {
-	width: 22px;
-	height: 22px;
-	border-radius: 8px;
+	width: 18px;
+	height: 18px;
+	border-radius: 6px;
 	flex-shrink: 0;
 	background: color-mix(in srgb, var(--mcp-accent-hi) 18%, transparent);
 	border: 1px solid color-mix(in srgb, var(--mcp-accent-hi) 28%, transparent);
@@ -467,54 +446,156 @@ body.app {
 	color: var(--vscode-descriptionForeground, #ccc);
 }
 
-.card--token {
-	border-left: 3px solid color-mix(in srgb, var(--vscode-charts-orange, #fb923c) 65%, transparent);
-	margin-bottom: 0;
+.card-icon--history {
+	background: color-mix(in srgb, var(--vscode-charts-yellow, #facc15) 20%, transparent);
+	border-color: color-mix(in srgb, var(--vscode-charts-yellow, #facc15) 38%, transparent);
 }
 
-.token-hint {
-	margin: 0 0 12px;
-	font-size: 11px;
-	line-height: 1.5;
-	color: var(--vscode-descriptionForeground, rgba(200, 200, 200, 0.55));
+.card--history {
+	border-left: 3px solid color-mix(in srgb, var(--vscode-charts-yellow, #facc15) 58%, transparent);
 }
 
-.token-grid {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 10px;
-	margin-bottom: 12px;
+.card--history.is-collapsed .history-list,
+.card--history.is-collapsed #btnClearHistory {
+	display: none;
 }
 
-.token-cell {
-	padding: 12px 12px;
-	border-radius: var(--mcp-radius);
-	background: color-mix(in srgb, var(--vscode-textBlockQuote-background, rgba(80, 80, 80, 0.15)) 100%, transparent);
+.history-panel-toggle {
+	padding: 3px 8px;
+	border-radius: var(--mcp-radius-sm);
 	border: 1px solid var(--mcp-border-soft);
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	color: var(--vscode-descriptionForeground, #aaa);
+	font-family: inherit;
+	font-size: 10.5px;
+	line-height: 1.35;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.history-panel-toggle:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.08));
+}
+
+.history-list {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
+	margin-bottom: 8px;
+	max-height: min(560px, 68vh);
+	overflow-y: auto;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
 }
 
-.token-label {
-	font-size: 10px;
-	font-weight: 600;
-	text-transform: uppercase;
+.history-list::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+}
+
+.history-item {
+	border-radius: 0;
+	border: none;
+	background: transparent;
+	padding: 4px 1px 6px;
+}
+
+.history-item + .history-item {
+	border-top: 1px dashed color-mix(in srgb, var(--mcp-border) 55%, transparent);
+	padding-top: 7px;
+}
+
+.history-item--user {
+	border-left: 2px solid color-mix(in srgb, var(--vscode-charts-blue, #60a5fa) 58%, transparent);
+	padding-left: 8px;
+}
+
+.history-item--assistant {
+	border-left: 2px solid color-mix(in srgb, var(--vscode-charts-green, #34d399) 58%, transparent);
+	padding-left: 8px;
+}
+
+.history-item-head {
+	font-size: 9px;
+	font-weight: 700;
 	letter-spacing: 0.08em;
-	color: var(--vscode-descriptionForeground, #aaa);
+	text-transform: uppercase;
+	color: var(--vscode-descriptionForeground, #999);
+	margin-bottom: 4px;
 }
 
-.token-val {
-	font-size: 20px;
-	font-weight: 750;
-	font-family: var(--mcp-font-mono);
-	font-variant-numeric: tabular-nums;
-	line-height: 1.15;
-	color: var(--vscode-foreground);
+.history-item-body {
+	font-size: 12px;
+	line-height: 1.5;
+	word-break: break-word;
+	position: relative;
 }
 
-.token-reset-btn {
+.history-item-body.is-collapsed {
+	max-height: 9.72em;
+	overflow: hidden;
+}
+
+.history-item-body.is-collapsed::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 2.6em;
+	background: linear-gradient(
+		180deg,
+		color-mix(in srgb, var(--mcp-surface-1) 0%, transparent) 0%,
+		color-mix(in srgb, var(--mcp-surface-1) 96%, transparent) 100%
+	);
+}
+
+.history-item-body p {
+	margin: 0.5em 0;
+}
+
+.history-item-body :first-child {
 	margin-top: 0;
+}
+
+.history-item-body :last-child {
+	margin-bottom: 0;
+}
+
+.history-toggle {
+	margin-top: 8px;
+	padding: 3px 8px;
+	border-radius: var(--mcp-radius-sm);
+	border: 1px solid var(--mcp-border-soft);
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	color: var(--vscode-descriptionForeground, #aaa);
+	font-family: inherit;
+	font-size: 10.5px;
+	line-height: 1.35;
+	cursor: pointer;
+}
+
+.history-toggle:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.08));
+}
+
+.history-list .muted {
+	margin: 0;
+	padding: 12px;
+	font-size: 12px;
+	text-align: center;
+	border-radius: var(--mcp-radius);
+	border: 1px dashed color-mix(in srgb, var(--mcp-border) 65%, transparent);
+	color: var(--vscode-descriptionForeground, #888);
+	background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent);
+}
+
+.token-inline {
+	font-family: var(--mcp-font-mono);
+	font-size: 10px;
+	margin-left: auto;
 }
 
 .card-title {
@@ -531,6 +612,12 @@ body.app {
 	border-left: 3px solid color-mix(in srgb, var(--vscode-charts-green, #34d399) 58%, transparent);
 }
 
+.card--reply.is-collapsed #replyContent,
+.card--reply.is-collapsed #btnToggleReply,
+.card--reply.is-collapsed #replyAck {
+	display: none;
+}
+
 .card--question {
 	border-left: 3px solid color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 58%, transparent);
 }
@@ -544,23 +631,69 @@ body.app {
 .reply-content {
 	white-space: pre-wrap;
 	word-break: break-word;
-	font-size: 12.5px;
-	line-height: 1.68;
-	max-height: min(480px, 65vh);
+	font-size: 12px;
+	line-height: 1.52;
+	max-height: min(520px, 66vh);
 	overflow-y: auto;
-	padding: 12px 12px;
-	border-radius: var(--mcp-radius);
-	background: color-mix(in srgb, var(--vscode-textBlockQuote-background, rgba(80, 80, 80, 0.12)) 100%, transparent);
-	border: 1px solid color-mix(in srgb, var(--mcp-border) 50%, transparent);
+	padding: 2px 2px 0;
+	border-radius: 0;
+	background: transparent;
+	border: none;
 	color: var(--vscode-foreground);
-	margin-bottom: 10px;
+	margin-bottom: 8px;
 	scrollbar-width: none;
 	-ms-overflow-style: none;
+}
+
+.reply-content.is-collapsed {
+	max-height: 11.2em;
+	overflow: hidden;
+	position: relative;
+}
+
+.reply-content.is-collapsed::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 2.8em;
+	background: linear-gradient(
+		180deg,
+		color-mix(in srgb, var(--mcp-surface-1) 0%, transparent) 0%,
+		color-mix(in srgb, var(--mcp-surface-1) 96%, transparent) 100%
+	);
 }
 
 .reply-content::-webkit-scrollbar {
 	width: 0;
 	height: 0;
+}
+
+.reply-toggle {
+	margin: 0 0 8px;
+	padding: 3px 8px;
+	border-radius: var(--mcp-radius-sm);
+	border: 1px solid var(--mcp-border-soft);
+	background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	color: var(--vscode-descriptionForeground, #aaa);
+	font-family: inherit;
+	font-size: 10.5px;
+	line-height: 1.35;
+	cursor: pointer;
+}
+
+.reply-toggle:hover {
+	color: var(--vscode-foreground);
+	background: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.08));
+}
+
+.reply-toggle.hidden {
+	display: none;
+}
+
+.card--reply #replyAck {
+	margin-top: 2px;
 }
 
 /* Markdown 摘要（check_messages / send_progress 的 reply） */
@@ -745,7 +878,7 @@ body.app {
 /* —— 底部輸入 —— */
 .composer {
 	flex-shrink: 0;
-	padding: 0 10px 12px;
+	padding: 0 8px 8px;
 	background: linear-gradient(
 		180deg,
 		transparent 0%,
@@ -755,14 +888,11 @@ body.app {
 }
 
 .composer-panel {
-	padding: 12px 12px 11px;
-	border-radius: var(--mcp-radius-xl);
+	padding: 9px 10px 8px;
+	border-radius: 13px;
 	border: 1px solid color-mix(in srgb, var(--mcp-border) 55%, transparent);
 	background: color-mix(in srgb, var(--mcp-surface-1) 94%, transparent);
-	box-shadow:
-		var(--mcp-shadow-lg),
-		0 0 0 1px rgba(255, 255, 255, 0.05) inset,
-		0 -2px 24px rgba(0, 0, 0, 0.06);
+	box-shadow: var(--mcp-shadow-md), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 	position: relative;
 	overflow: hidden;
 	backdrop-filter: blur(10px);
@@ -928,14 +1058,14 @@ body.app {
 
 .compose-input {
 	width: 100%;
-	padding: 10px 11px;
+	padding: 8px 9px;
 	border: none;
 	border-radius: inherit;
 	background: transparent;
 	color: var(--vscode-input-foreground, inherit);
 	resize: vertical;
-	min-height: 68px;
-	max-height: 180px;
+	min-height: 56px;
+	max-height: 150px;
 	font-family: inherit;
 	font-size: 13px;
 	line-height: 1.55;
@@ -1140,6 +1270,52 @@ body.app {
 	background: transparent;
 	color: var(--vscode-errorForeground, #f87171);
 	border: 1px solid var(--vscode-inputValidation-errorBorder, rgba(248, 113, 113, 0.45));
+}
+
+.settings-dialog {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.36);
+	backdrop-filter: blur(2px);
+	display: grid;
+	place-items: center;
+	padding: 12px;
+	z-index: 20;
+}
+
+.settings-dialog.hidden {
+	display: none;
+}
+
+.settings-card {
+	width: min(460px, calc(100vw - 24px));
+	max-width: 100%;
+	padding: 14px 14px 13px;
+	border-radius: 12px;
+	border: 1px solid var(--mcp-border-soft);
+	background: var(--mcp-surface-1);
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	box-shadow: var(--mcp-shadow-lg);
+}
+
+.settings-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.settings-card .topbar-control {
+	gap: 6px;
+}
+
+.settings-card .topbar-lang-select {
+	width: 100%;
+	min-height: 34px;
+	font-size: 12px;
+	padding: 6px 30px 6px 9px;
 }
 
 .btn-sm {
