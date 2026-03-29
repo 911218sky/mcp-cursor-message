@@ -4,7 +4,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { AnswerEntry, QueueMsg } from "./ipc-types";
+import type { AnswerEntry, QueueMsg } from "./types/ipc-json";
 
 /** 佇列持久化時附加 `timestamp`（供 UI 預覽）。 */
 export type QueueMsgStored = QueueMsg & { timestamp?: string };
@@ -59,6 +59,22 @@ export async function appendQueue(
 	};
 	q.push(stored);
 	await writeQueue(dataDir, q);
+}
+
+/** 若為側欄貼上寫入之 `paste/` 圖檔，自磁碟刪除（不刪檔案選擇器加入之路徑）。 */
+export async function unlinkPasteImageIfManaged(
+	dataDir: string,
+	msg: QueueMsg
+): Promise<void> {
+	if (msg.type !== "image" || !msg.path) return;
+	const pasteRoot = path.normalize(path.join(dataDir, "paste"));
+	const fp = path.normalize(msg.path);
+	if (!fp.startsWith(pasteRoot + path.sep)) return;
+	try {
+		await fs.unlink(fp);
+	} catch {
+		/* 已刪或無檔 */
+	}
 }
 
 /**

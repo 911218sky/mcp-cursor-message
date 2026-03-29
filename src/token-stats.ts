@@ -3,7 +3,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { QueueMsg } from "./ipc-types";
+import type { QueueMsg } from "./types/ipc-json";
 import {
 	estimateFileTokens,
 	estimateImageFileTokens,

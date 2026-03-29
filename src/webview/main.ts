@@ -3,25 +3,18 @@
  * 負責渲染佇列／問答／摘要，並以 `postMessage` 與 extension host 通訊。
  */
 import { strings, type UiLocale } from "./i18n";
-
-type UiLanguageSetting = "en" | "zh" | "auto";
+import { markdownToSafeHtml } from "./markdown";
+import type {
+	ExtensionPanelStateMessage,
+	PanelTokenStats,
+	PanelUiLanguageSetting,
+	QuestionPayload,
+	WebviewHostMessage,
+} from "../types/panel-messages";
 
 /** VS Code 在 Webview 內注入；僅能呼叫一次，取得與 extension host 通訊的 API。 */
 declare function acquireVsCodeApi(): {
-	postMessage(message: unknown): void;
-};
-
-type QuestionOption = { id: string; label: string };
-type QuestionItem = {
-	id: string;
-	question: string;
-	options: QuestionOption[];
-	allow_multiple: boolean;
-};
-type QuestionPayload = {
-	id: string;
-	questions: QuestionItem[];
-	timestamp?: string;
+	postMessage(message: WebviewHostMessage): void;
 };
 
 const vscode = acquireVsCodeApi();
@@ -34,7 +27,7 @@ let uiLocale: UiLocale = "en";
 /** 最近一次佇列資料，語系切換時重繪預覽。 */
 let lastQueue: unknown;
 /** 與 `mcpMessenger.uiLanguage` 同步（頂欄選單值）。 */
-let lastUiLanguageSetting: UiLanguageSetting = "en";
+let lastUiLanguageSetting: PanelUiLanguageSetting = "en";
 
 function S() {
 	return strings(uiLocale);
@@ -68,7 +61,7 @@ function applyChrome(loc: UiLocale): void {
 }
 
 /** 頂欄語言選單文案與目前設定值。 */
-function updateLanguageSelect(setting: UiLanguageSetting): void {
+function updateLanguageSelect(setting: PanelUiLanguageSetting): void {
 	const t = S();
 	$("chromeLangLabel").textContent = t.langLabel;
 	const sel = $("uiLanguageSelect") as HTMLSelectElement;
@@ -221,15 +214,21 @@ function cancelQ(): void {
 	curQuestion = null;
 }
 
-/** 顯示或隱藏 `check_messages`／`send_progress` 寫入的摘要（`reply.json`）。 */
+/**
+ * 顯示或隱藏 `check_messages`／`send_progress` 寫入的摘要（`reply.json`）。
+ * 無內容時清空 DOM 並移除 `reply-content--md`，避免隱藏後仍殘留 HTML／樣式，下次顯示其他內容時誤用 MD 排版。
+ */
 function renderReply(content: string | undefined): void {
 	const card = $("replyCard");
 	const rc = $("replyContent");
 	if (!content) {
 		card.classList.add("hidden");
+		rc.innerHTML = "";
+		rc.classList.remove("reply-content--md");
 		return;
 	}
-	rc.textContent = content;
+	rc.classList.add("reply-content--md");
+	rc.innerHTML = markdownToSafeHtml(content);
 	card.classList.remove("hidden");
 }
 
@@ -270,15 +269,8 @@ function renderQueuePreview(queue: unknown): void {
 	el.innerHTML = h;
 }
 
-/** 與 extension `pushStateToPanel` 推送之欄位對齊（見 ipc 讀檔）。 */
-type TokenStats = {
-	totalEstimated?: number;
-	lastMessageEstimated?: number;
-	updatedAt?: string;
-};
-
 /** 顯示側欄送入佇列之 token 約略累計（由擴充估算，非 Cursor 帳單實值）。 */
-function renderTokenStats(ts: TokenStats | undefined): void {
+function renderTokenStats(ts: PanelTokenStats | undefined): void {
 	const totalEl = $("tokenTotal");
 	const lastEl = $("tokenLast");
 	if (!ts || typeof ts.totalEstimated !== "number") {
@@ -298,32 +290,16 @@ function renderTokenStats(ts: TokenStats | undefined): void {
  * `type === "state"` 時為完整狀態同步，對應擴充端 `pushStateToPanel`。
  */
 window.addEventListener("message", (ev) => {
-	const m = ev.data as {
-		type?: string;
-		uiLocale?: UiLocale;
-		uiLanguageSetting?: UiLanguageSetting;
-		question?: unknown;
-		reply?: { content?: string } | null;
-		queue?: unknown;
-		tokenStats?: TokenStats;
-	};
-	if (m.type === "state") {
-		lastQueue = m.queue;
-		if (
-			m.uiLanguageSetting === "en" ||
-			m.uiLanguageSetting === "zh" ||
-			m.uiLanguageSetting === "auto"
-		) {
-			lastUiLanguageSetting = m.uiLanguageSetting;
-		}
-		if (m.uiLocale === "en" || m.uiLocale === "zh") {
-			applyChrome(m.uiLocale);
-		}
-		renderQuestion((m.question as QuestionPayload | null) ?? null);
-		renderReply(m.reply?.content);
-		renderQueuePreview(m.queue);
-		renderTokenStats(m.tokenStats);
-	}
+	const raw = ev.data as { type?: string };
+	if (raw.type !== "state") return;
+	const m = raw as ExtensionPanelStateMessage;
+	lastQueue = m.queue;
+	lastUiLanguageSetting = m.uiLanguageSetting;
+	applyChrome(m.uiLocale);
+	renderQuestion((m.question as QuestionPayload | null) ?? null);
+	renderReply(m.reply?.content);
+	renderQueuePreview(m.queue);
+	renderTokenStats(m.tokenStats);
 });
 
 const ta = $("msgInput") as HTMLTextAreaElement;

@@ -8,9 +8,6 @@ import path from "node:path";
 /** 與 MCP 伺服器 `MCP_DISPLAY_NAME`、`.cursor/mcp.json` 鍵名一致。 */
 export const SERVER_KEY = "mcp-cursor-message";
 
-/** 舊版鍵名：安裝時移除以避免重複伺服器；卸載時一併清除。 */
-const LEGACY_MCP_SERVER_KEYS = ["Cursor MCP 對話外掛（源碼版）"] as const;
-
 type McpJsonShape = {
 	mcpServers?: Record<
 		string,
@@ -18,10 +15,7 @@ type McpJsonShape = {
 	>;
 };
 
-/**
- * 合併或建立 `.cursor/mcp.json`，註冊本專案 MCP 與 `MESSENGER_DATA_DIR`，
- * 並移除舊版鍵名以免重複伺服器。
- */
+/** 合併或建立 `.cursor/mcp.json`，註冊本專案 MCP 與 `MESSENGER_DATA_DIR`。 */
 export async function installMcpServer(
 	workspaceRoot: string,
 	extensionPath: string,
@@ -41,10 +35,6 @@ export async function installMcpServer(
 	}
 	if (!doc.mcpServers) doc.mcpServers = {};
 
-	for (const k of LEGACY_MCP_SERVER_KEYS) {
-		delete doc.mcpServers[k];
-	}
-
 	doc.mcpServers[SERVER_KEY] = {
 		command: "node",
 		args: [mcpServerPath],
@@ -56,7 +46,7 @@ export async function installMcpServer(
 	await fs.writeFile(mcpPath, JSON.stringify(doc, null, 2), "utf-8");
 }
 
-/** 自 `mcp.json` 移除 `SERVER_KEY` 與舊版鍵名；檔案仍存在以保留其他伺服器設定。 */
+/** 自 `mcp.json` 移除 `SERVER_KEY`；檔案仍存在以保留其他伺服器設定。 */
 export async function removeMcpServer(workspaceRoot: string): Promise<void> {
 	const mcpPath = path.join(workspaceRoot, ".cursor", "mcp.json");
 	let doc: McpJsonShape;
@@ -68,9 +58,6 @@ export async function removeMcpServer(workspaceRoot: string): Promise<void> {
 	}
 	if (doc.mcpServers) {
 		delete doc.mcpServers[SERVER_KEY];
-		for (const k of LEGACY_MCP_SERVER_KEYS) {
-			delete doc.mcpServers[k];
-		}
 	}
 	await fs.writeFile(mcpPath, JSON.stringify(doc, null, 2), "utf-8");
 }

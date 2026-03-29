@@ -12,11 +12,16 @@ import {
 	readQueue,
 	readReply,
 	removeQueueItemAtIndex,
+	unlinkPasteImageIfManaged,
 	unlinkReply,
 	writeAnswerFile,
 } from "./ipc";
 import { installMcpServer, removeMcpServer } from "./mcp-config";
-import type { AnswerEntry, QueueMsg } from "./ipc-types";
+import type { QueueMsg } from "./types/ipc-json";
+import type {
+	ExtensionPanelStateMessage,
+	WebviewHostMessage,
+} from "./types/panel-messages";
 import {
 	readTokenStats,
 	recordTokensForQueueMessage,
@@ -32,6 +37,8 @@ let fileWatcherStop: (() => void) | undefined;
 let panelView: vscode.WebviewView | undefined;
 /** 檔案 watcher 防抖計時器，避免短時間內多次觸發重複推送。 */
 let debounceTimer: NodeJS.Timeout | undefined;
+/** `messenger-data/*.json` 變更後延遲推送側欄狀態（毫秒）。 */
+const PUSH_STATE_DEBOUNCE_MS = 100;
 
 /** `panel.html` 原始模板（僅 nonce／URI 每輪替換），避免 `resolveWebviewView` 重入時重複讀檔。 */
 let cachedPanelHtmlTemplate: string | undefined;
@@ -79,11 +86,16 @@ function rebindMessengerDataDir(context: vscode.ExtensionContext): void {
 	const next = messengerDataDirForContext(context);
 	if (next === dataDir) return;
 	dataDir = next;
+	// 新路徑首次寫入前先建立目錄。
 	void ensureDataDir(dataDir);
+	// 舊路徑的 watcher 先釋放，避免監聽錯目錄。
 	fileWatcherStop?.();
 	fileWatcherStop = undefined;
+	// 改監聽新 `dataDir` 底下 `*.json`。
 	startDataDirWatcher();
+	// 側欄改讀新路徑的 queue／question／reply。
 	schedulePushState();
+	// 若有工作區，對齊 `.cursor/mcp.json` 與 `MESSENGER_DATA_DIR`。
 	void autoInstallMcpIfWorkspace(context);
 }
 
@@ -118,6 +130,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		)
 	);
 
+	// 命令：手動寫入工作區 `.cursor/mcp.json` + 註冊 MCP，並指向 `.cursor/messenger-data`。
 	context.subscriptions.push(
 		vscode.commands.registerCommand("mcpMessenger.setupMcp", async () => {
 			const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -138,6 +151,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		})
 	);
 
+	// 命令：自 `mcp.json` 移除本擴充的 MCP 條目（不刪整檔）。
 	context.subscriptions.push(
 		vscode.commands.registerCommand("mcpMessenger.removeMcp", async () => {
 			const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -155,56 +169,17 @@ export function activate(context: vscode.ExtensionContext): void {
 		})
 	);
 
-	context.subscriptions.push(
-		vscode.commands.registerCommand("mcpMessenger.resetTokenStats", async () => {
-			try {
-				await resetTokenStats(dataDir);
-				void vscode.window.showInformationMessage("已重設側欄 token 約略統計。");
-				schedulePushState();
-			} catch (e) {
-				const msg = e instanceof Error ? e.message : String(e);
-				void vscode.window.showErrorMessage("重設失敗：" + msg);
-			}
-		})
-	);
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand(
-			"mcpMessenger.sendFile",
-			async (uri?: vscode.Uri) => {
-				const target =
-					uri ?? vscode.window.activeTextEditor?.document.uri;
-				const fsPath =
-					target?.scheme === "file" ? target.fsPath : undefined;
-				if (!fsPath) {
-					void vscode.window.showWarningMessage(
-						"請在檔案總管以右鍵選取檔案，或先開啟一個本機檔案。"
-					);
-					return;
-				}
-				try {
-					await appendQueueWithTokenRecord(dataDir, {
-						type: "file",
-						path: fsPath,
-					});
-					void vscode.window.showInformationMessage("已加入檔案至佇列。");
-					schedulePushState();
-				} catch (e) {
-					const msg = e instanceof Error ? e.message : String(e);
-					void vscode.window.showErrorMessage("加入佇列失敗：" + msg);
-				}
-			}
-		)
-	);
-
+	// 監聽佇列／問答等 JSON，變更時防抖後推狀態至 Webview。
 	startDataDirWatcher();
 
+	// 新增／移除／切換工作區資料夾時改 `dataDir`、重建 watcher、必要時靜默寫 MCP。
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeWorkspaceFolders(() => {
 			rebindMessengerDataDir(context);
 		})
 	);
 
+	// 使用者變更 `mcpMessenger.uiLanguage` 時同步側欄文案／語系。
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((e) => {
 			if (e.affectsConfiguration("mcpMessenger.uiLanguage")) {
@@ -227,7 +202,10 @@ function startDataDirWatcher(): void {
 		// 連續寫入時只觸發一次推送，避免閃爍與重複 IO。
 		const debounced = () => {
 			if (debounceTimer) clearTimeout(debounceTimer);
-			debounceTimer = setTimeout(() => schedulePushState(), 100);
+			debounceTimer = setTimeout(
+				() => schedulePushState(),
+				PUSH_STATE_DEBOUNCE_MS
+			);
 		};
 		w.onDidChange(debounced);
 		w.onDidCreate(debounced);
@@ -248,7 +226,7 @@ async function pushStateToPanel(): Promise<void> {
 	const reply = await readReply(dataDir);
 	const queue = await readQueue(dataDir);
 	const tokenStats = await readTokenStats(dataDir);
-	void panelView.webview.postMessage({
+	const msg: ExtensionPanelStateMessage = {
 		type: "state",
 		uiLocale: resolvePanelUiLocale(),
 		uiLanguageSetting: getUiLanguageSetting(),
@@ -256,7 +234,8 @@ async function pushStateToPanel(): Promise<void> {
 		reply: reply ? { content: reply.content } : null,
 		queue,
 		tokenStats,
-	});
+	};
+	void panelView.webview.postMessage(msg);
 }
 
 /** 觸發非同步 `pushStateToPanel`（供 watcher、送訊後呼叫）。 */
@@ -279,6 +258,7 @@ async function writePasteImageFromBase64(
 	base64: string,
 	mime: string
 ): Promise<string | undefined> {
+	// 貼上內容為 base64 字串；超過約 25M 字元則拒絕（解碼後約 <20MB，依格式略有差異）。
 	const maxB64 = 25 * 1024 * 1024;
 	if (base64.length > maxB64) {
 		void vscode.window.showWarningMessage(
@@ -364,16 +344,17 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 		webviewView.webview.html = template;
 
 		// 網頁端 vscode.postMessage({ type, ... }) → 此處對應寫入佇列／答案檔等。
-		webviewView.webview.onDidReceiveMessage(async (msg) => {
+		webviewView.webview.onDidReceiveMessage(async (raw: unknown) => {
+			const msg = raw as WebviewHostMessage;
 			const dir = this.getDataDir();
 			try {
-				switch (msg?.type) {
+				switch (msg.type) {
 					// 前端載入完成，拉一次完整狀態。
 					case "ready":
 						await pushStateToPanel();
 						break;
 					case "setUiLanguage": {
-						const v = String((msg as { value?: string }).value);
+						const v = String(msg.value ?? "");
 						if (v === "en" || v === "zh" || v === "auto") {
 							await vscode.workspace
 								.getConfiguration("mcpMessenger")
@@ -396,20 +377,12 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 						await pushStateToPanel();
 						break;
 					}
-					/** 輸入框送出：可僅文字、僅貼圖，或圖片加說明（說明寫入 image.caption）。 */
+					// 輸入框送出：可僅文字、僅貼圖，或圖片加說明
 					case "sendComposer": {
-						const text = String(
-							(msg as { text?: string }).text ?? ""
-						).trim();
-						const rawImages = (msg as {
-							images?: { base64?: string; mime?: string }[];
-						}).images;
-						const base64 = String(
-							(msg as { base64?: string }).base64 ?? ""
-						);
-						const mime = String(
-							(msg as { mime?: string }).mime ?? "image/png"
-						);
+						const text = String(msg.text ?? "").trim();
+						const rawImages = msg.images;
+						const base64 = String(msg.base64 ?? "");
+						const mime = String(msg.mime ?? "image/png");
 						const images: { base64: string; mime: string }[] = [];
 						if (Array.isArray(rawImages) && rawImages.length > 0) {
 							for (const im of rawImages) {
@@ -443,6 +416,7 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 								path: fp,
 							});
 						}
+						// 僅文字、無貼圖：上文「字+圖」分支不會進入，迴圈亦無圖，於此單獨入佇列。
 						if (images.length === 0 && text) {
 							await appendQueueWithTokenRecord(dir, {
 								type: "text",
@@ -452,16 +426,19 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 						await pushStateToPanel();
 						break;
 					}
+					// 側欄「重設 Token」：清空持久化統計後同步 UI。
 					case "resetTokenStats": {
 						await resetTokenStats(dir);
 						await pushStateToPanel();
 						break;
 					}
+					// 佇列預覽列撤銷：依索引刪 queue 項目；若為 paste 暫存圖則刪檔並回沖 token。
 					case "removeQueueItem": {
-						const index = Number((msg as { index?: unknown }).index);
+						const index = Number(msg.index);
 						if (!Number.isInteger(index) || index < 0) break;
 						const removed = await removeQueueItemAtIndex(dir, index);
 						if (removed) {
+							await unlinkPasteImageIfManaged(dir, removed);
 							await subtractTokensForQueueMessage(dir, removed);
 						}
 						await pushStateToPanel();
@@ -469,7 +446,7 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 					}
 					// MCP 問答：寫入答案檔供 mcp-server 讀取。
 					case "submitAnswer": {
-						const answers = (msg.answers ?? []) as AnswerEntry[];
+						const answers = msg.answers ?? [];
 						await writeAnswerFile(dir, answers);
 						await pushStateToPanel();
 						break;
@@ -488,9 +465,9 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 					}
 					// 系統檔案選擇器；可複選，依 kind 當圖片或一般檔案入佇列。
 					case "pickQueueFiles": {
-						const kind = String(
-							(msg as { kind?: string }).kind ?? "file"
-						) as "image" | "file";
+						const kind = String(msg.kind ?? "file") as
+							| "image"
+							| "file";
 						const uris = await vscode.window.showOpenDialog({
 							canSelectMany: true,
 							openLabel: kind === "image" ? "選擇圖片" : "選擇檔案",

@@ -37,7 +37,7 @@ flowchart LR
 ## 流程 1：使用者內容進佇列
 
 1. 使用者在側欄輸入文字、貼圖、或用命令把檔案路徑送進佇列。
-2. 擴充把內容**附加**進 `queue.json`（格式見 `src/ipc-types.ts`），並可能帶上時間戳。
+2. 擴充把內容**附加**進 `queue.json`（格式見 `src/types/ipc-json.d.ts`），並可能帶上時間戳。
 3. File watcher 觸發 → 側欄刷新預覽；此時 MCP 尚未一定要被呼叫，但**佇列已落在磁碟上，等待模型端處理**。
 
 ---
@@ -130,7 +130,7 @@ sequenceDiagram
 |--------------|----------------|
 | 側欄 UI、提交答案、postMessage | `src/webview/main.ts` |
 | Webview 註冊、推狀態、watcher、命令 | `src/extension.ts` |
-| 讀寫 `queue.json` 等 | `src/ipc.ts`、`src/ipc-types.ts` |
+| 讀寫 `queue.json` 等 | `src/ipc.ts`、`src/types/ipc-json.d.ts` |
 | 寫 `.cursor/mcp.json` | `src/mcp-config.ts` |
 | MCP 工具與輪詢邏輯 | `mcp-server/index.ts` |
 | 三份 bundle 怎麼編 | `esbuild.config.mjs` |

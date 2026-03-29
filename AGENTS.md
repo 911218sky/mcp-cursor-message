@@ -10,7 +10,7 @@
 
 ## 指引原則
 
-1. **單一事實來源**：IPC 檔名、語意與 `MESSENGER_DATA_DIR` 行為以 [PROJECT.md](./PROJECT.md)（流程章節與「資料夾裡的檔案」速查表）與程式碼為準；修改時同步更新 **PROJECT.md** 與相關型別（`src/ipc-types.ts`、`mcp-server/index.ts`）。
+1. **單一事實來源**：IPC 檔名、語意與 `MESSENGER_DATA_DIR` 行為以 [PROJECT.md](./PROJECT.md)（流程章節與「資料夾裡的檔案」速查表）與程式碼為準；修改時同步更新 **PROJECT.md** 與相關型別（`src/types/ipc-json.d.ts`、`mcp-server/index.ts`）。
 2. **小步提交**：優先最小可行 diff；避免與議題無關的重構、大規模格式化。
 3. **建置驗證**：變更後在儲存庫根目錄執行 `bun run compile`；若動到打包或 `package.json`，執行 `bun run package` 確認可產出 `.vsix`。
 

@@ -9,29 +9,13 @@ import os from "node:os";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
-
-// --- 型別 -----------------------------------------------------------------
-
-/** 擴充功能寫入 queue.json 的單則訊息。 */
-type QueueMsg =
-	| { type: "text"; content?: string }
-	| { type: "image"; path?: string; caption?: string }
-	| { type: "file"; path?: string; suffix?: string };
-
-/** MCP 工具回傳給模型的文字片段。 */
-type TextPart = { type: "text"; text: string };
-/** 圖片以 base64 一併送入模型上下文。 */
-type ImagePart = { type: "image"; data: string; mimeType: string };
-type ContentPart = TextPart | ImagePart;
-
-/** ask_question 收到 answer.json 時，每一題的作答。 */
-type AnswerEntry = {
-	questionId?: string;
-	selected?: string[];
-	other?: string;
-};
+import type { AnswerEntry, QueueMsg } from "../src/types/ipc-json.js";
+import type {
+	ContentPart,
+	TextPart,
+	ToolExtra,
+} from "./mcp-server-types.js";
 
 // --- 路徑與常數 -----------------------------------------------------------
 
@@ -47,13 +31,19 @@ const LOG_FILE = path.join(DATA_DIR, "server.log");
 /** `server.log` 上限（位元組）；超過則自尾端保留至多此大小。 */
 const MAX_SERVER_LOG_BYTES = 1024 * 1024;
 
-/** 輪詢 queue / answer 的間隔（毫秒）。 */
-const POLL_INTERVAL = 100;
+/**
+ * 輪詢 queue / answer 的間隔（毫秒）。
+ * 預設 500ms 以降低讀檔頻率；可設 `MESSENGER_POLL_INTERVAL_MS` 覆寫。
+ */
+const POLL_INTERVAL =
+	Number(process.env.MESSENGER_POLL_INTERVAL_MS) || 500;
 
+/** 長等待時發送進度／日誌心跳的間隔；預設 1 分鐘。 */
 const HEARTBEAT_INTERVAL =
-	Number(process.env.MESSENGER_HEARTBEAT_INTERVAL_MS) || 8000;
+	Number(process.env.MESSENGER_HEARTBEAT_INTERVAL_MS) || 60_000;
 
-const MAX_WAIT_MS = Number(process.env.MESSENGER_MAX_WAIT_MS) || 120000;
+/** 單次工具呼叫內最長等待（毫秒）；預設 1 小時，可設 `MESSENGER_MAX_WAIT_MS`。 */
+const MAX_WAIT_MS = Number(process.env.MESSENGER_MAX_WAIT_MS) || 3_600_000;
 
 /** MCP 協議註冊名稱、`.cursor/mcp.json` 鍵名、logging；須與擴充 `mcp-config.ts` 的 `SERVER_KEY` 一致。 */
 const MCP_DISPLAY_NAME = "mcp-cursor-message";
@@ -103,6 +93,21 @@ async function readQueue(): Promise<QueueMsg[]> {
 /** 佇列成功送進模型上下文後清空，避免重複處理。 */
 async function clearQueue(): Promise<void> {
 	await fs.writeFile(QUEUE_FILE, "[]", "utf-8");
+}
+
+/** 刪除側欄貼上產生之 `paste/` 暫存檔（不刪使用者以檔案選擇器加入的本機路徑）。 */
+async function unlinkPasteQueueImages(queue: QueueMsg[]): Promise<void> {
+	const pasteRoot = path.normalize(path.join(DATA_DIR, "paste"));
+	for (const item of queue) {
+		if (item.type !== "image" || !item.path) continue;
+		const fp = path.normalize(item.path);
+		if (!fp.startsWith(pasteRoot + path.sep)) continue;
+		try {
+			await fs.unlink(fp);
+		} catch {
+			/* 已刪或無檔 */
+		}
+	}
 }
 
 /**
@@ -288,8 +293,6 @@ async function appendServerLog(level: string, message: string): Promise<void> {
 
 // --- 長等待心跳 -----------------------------------------------------------
 
-type ToolExtra = RequestHandlerExtra<never, ServerNotification>;
-
 /**
  * 長時間等待時通知客戶端（優先 MCP progress，否則 logging），
  * 避免使用者以為工具當機。
@@ -304,10 +307,10 @@ async function emitHeartbeat(
 	if (progressToken !== undefined) {
 		try {
 			await extra.sendNotification({
-				method: "notifications/progress",
+				method: "notifications/progress" as const,
 				params: {
 					progressToken,
-					progress: Date.now(),
+					progress: 0,
 					message,
 				},
 			} as ServerNotification);
@@ -380,6 +383,7 @@ function registerCheckMessages(server: McpServer): void {
 							results.push(processed);
 						}
 					}
+					await unlinkPasteQueueImages(queue);
 					await clearQueue();
 
 					if (results.length > 0 && results[results.length - 1]!.type === "text") {
@@ -410,11 +414,7 @@ function registerCheckMessages(server: McpServer): void {
 				}
 
 				if (Date.now() >= nextHeartbeatAt) {
-					await emitHeartbeat(
-						server,
-						extra as ToolExtra,
-						`${MCP_DISPLAY_NAME} 仍在等待下一則使用者訊息。`
-					);
+					await emitHeartbeat(server, extra as ToolExtra, "正在等待");
 					nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL;
 				}
 				const keepWaiting = await sleepWithAbort(extra.signal, POLL_INTERVAL);
@@ -585,11 +585,7 @@ function registerAskQuestion(server: McpServer): void {
 				}
 
 				if (Date.now() >= nextHeartbeatAt) {
-					await emitHeartbeat(
-						server,
-						extra as ToolExtra,
-						`${MCP_DISPLAY_NAME} 仍在等待使用者的回答。`
-					);
+					await emitHeartbeat(server, extra as ToolExtra, "正在等待");
 					nextHeartbeatAt = Date.now() + HEARTBEAT_INTERVAL;
 				}
 				const keepWaiting = await sleepWithAbort(extra.signal, POLL_INTERVAL);

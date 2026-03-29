@@ -44,24 +44,8 @@
 			{
 				"command": "mcpMessenger.removeMcp",
 				"title": "mcp-cursor-message: Remove MCP configuration"
-			},
-			{
-				"command": "mcpMessenger.sendFile",
-				"title": "mcp-cursor-message: Queue file from workspace"
-			},
-			{
-				"command": "mcpMessenger.resetTokenStats",
-				"title": "mcp-cursor-message: Reset token statistics (estimate)"
 			}
 		],
-		"menus": {
-			"explorer/context": [
-				{
-					"command": "mcpMessenger.sendFile",
-					"group": "navigation@100"
-				}
-			]
-		},
 		"configuration": {
 			"title": "MCP chat",
 			"properties": {
@@ -82,9 +66,12 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.28.0",
+		"dompurify": "^3.3.3",
+		"marked": "^17.0.5",
 		"zod": "^4.3.6"
 	},
 	"devDependencies": {
+		"@types/dompurify": "^3.2.0",
 		"@types/node": "^25.5.0",
 		"@types/vscode": "^1.105.0",
 		"@vscode/vsce": "^3.7.1",
