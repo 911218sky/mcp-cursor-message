@@ -12,8 +12,7 @@ on:
 
 jobs:
   auto_release:
-    # Push to main -> auto bump patch version, create tag, then push.
-    # The tag push will trigger another run to package and publish VSIX.
+    # Push to main -> auto bump patch version, create tag, package VSIX, publish release.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     permissions:
@@ -30,18 +29,43 @@ jobs:
           node-version: 20
 
       - name: Bump patch version and push tag
+        id: bump
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           NEXT_VERSION="$(node -e "const fs=require('fs'); const p='./package.json'; const pkg=JSON.parse(fs.readFileSync(p,'utf8')); const [ma,mi,pa]=pkg.version.split('.').map(Number); const next=String(ma)+'.'+String(mi)+'.'+String(pa+1); pkg.version=next; fs.writeFileSync(p, JSON.stringify(pkg, null, '\t')+'\\n'); process.stdout.write(next);")"
+          echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
 
           git add package.json
           git commit -m "chore(release): v$NEXT_VERSION"
           git tag "v$NEXT_VERSION"
           git push origin HEAD:main
           git push origin "v$NEXT_VERSION"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.17
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Compile and pack
+        run: bun run package
+
+      - name: Create or update GitHub Release for auto tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ steps.bump.outputs.next_version }}
+        run: |
+          set -e
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" *.vsix --clobber
+          else
+            gh release create "$TAG" *.vsix --generate-notes --verify-tag
+          fi
 
   package:
     # For push events, package only for v* tags.
