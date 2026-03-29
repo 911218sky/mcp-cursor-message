@@ -1,8 +1,8 @@
 {
 	"name": "mcp-cursor-message",
 	"displayName": "mcp-cursor-message",
-	"description": "MCP 旁路對話：側欄佇列、check_messages / ask_question；與 Cursor 整合。",
-	"version": "9.1.0",
+	"description": "MCP side-channel chat: sidebar queue, check_messages / ask_question; Cursor integration.",
+	"version": "9.2.0",
 	"author": "911218sky",
 	"publisher": "local",
 	"repository": {
@@ -22,7 +22,7 @@
 			"activitybar": [
 				{
 					"id": "mcpMessenger",
-					"title": "MCP 對話",
+					"title": "MCP chat",
 					"icon": "media/icon.svg"
 				}
 			]
@@ -32,26 +32,26 @@
 				{
 					"type": "webview",
 					"id": "mcpMessenger.mainView",
-					"name": "訊息與佇列"
+					"name": "Messages & queue"
 				}
 			]
 		},
 		"commands": [
 			{
 				"command": "mcpMessenger.setupMcp",
-				"title": "mcp-cursor-message: 安裝 MCP 設定"
+				"title": "mcp-cursor-message: Install MCP configuration"
 			},
 			{
 				"command": "mcpMessenger.removeMcp",
-				"title": "mcp-cursor-message: 卸載 MCP 設定"
+				"title": "mcp-cursor-message: Remove MCP configuration"
 			},
 			{
 				"command": "mcpMessenger.sendFile",
-				"title": "mcp-cursor-message: 傳送檔案到輸入框"
+				"title": "mcp-cursor-message: Queue file from workspace"
 			},
 			{
 				"command": "mcpMessenger.resetTokenStats",
-				"title": "mcp-cursor-message: 重設 token 統計（約略）"
+				"title": "mcp-cursor-message: Reset token statistics (estimate)"
 			}
 		],
 		"menus": {
@@ -63,13 +63,13 @@
 			]
 		},
 		"configuration": {
-			"title": "MCP 對話",
+			"title": "MCP chat",
 			"properties": {
 				"mcpMessenger.uiLanguage": {
 					"type": "string",
 					"enum": ["en", "zh", "auto"],
 					"default": "en",
-					"description": "側欄 Webview 介面語言。預設英文；auto＝沿用 VS Code／Cursor 顯示語言。"
+					"description": "Sidebar Webview UI language. Default English; auto follows the editor display language."
 				}
 			}
 		}

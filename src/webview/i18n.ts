@@ -34,6 +34,13 @@ export type UiStrings = {
 	removeQueueAria: string;
 	previewImage: string;
 	previewFilePrefix: string;
+	/** 頂欄語言選單 */
+	langLabel: string;
+	langOptEn: string;
+	langOptZh: string;
+	langOptAuto: string;
+	/** 移除輸入區暫存貼圖（aria） */
+	pendingPasteRemoveAria: string;
 };
 
 export const UI: Record<UiLocale, UiStrings> = {
@@ -55,10 +62,11 @@ export const UI: Record<UiLocale, UiStrings> = {
 		tokenLast: "上一則",
 		tokenReset: "重設統計",
 		composerLabel: "傳給 AI",
-		composerHint: "Enter 送出 · Shift+Enter 換行 · 可貼上剪貼簿圖片",
+		composerHint:
+			"Enter 送出 · Shift+Enter 換行 · 貼圖會先暫存，按「送出」才送出",
 		btnImage: "圖片",
 		btnFile: "檔案",
-		composerAttachHint: "選擇器加入附件 · 輸入框內 Ctrl+V 貼圖",
+		composerAttachHint: "選擇器加入附件 · Ctrl+V 貼圖暫存於輸入區",
 		btnSend: "送出",
 		placeholderInput: "輸入訊息…",
 		qOtherPlaceholder: "補充說明（可選）",
@@ -70,6 +78,11 @@ export const UI: Record<UiLocale, UiStrings> = {
 		removeQueueAria: "撤銷佇列訊息",
 		previewImage: "[圖片]",
 		previewFilePrefix: "[檔案]",
+		langLabel: "介面語言",
+		langOptEn: "English",
+		langOptZh: "繁體中文",
+		langOptAuto: "自動（編輯器）",
+		pendingPasteRemoveAria: "移除暫存圖片",
 	},
 	en: {
 		topbarTitle: "MCP chat",
@@ -90,10 +103,10 @@ export const UI: Record<UiLocale, UiStrings> = {
 		tokenReset: "Reset stats",
 		composerLabel: "To AI",
 		composerHint:
-			"Enter to send · Shift+Enter newline · paste images from clipboard",
+			"Enter to send · Shift+Enter newline · pasted images stay until you press Send",
 		btnImage: "Image",
 		btnFile: "File",
-		composerAttachHint: "Pick attachments · Ctrl+V paste image in box",
+		composerAttachHint: "Pick attachments · Ctrl+V in box stages pasted image",
 		btnSend: "Send",
 		placeholderInput: "Type a message…",
 		qOtherPlaceholder: "Optional note",
@@ -105,6 +118,11 @@ export const UI: Record<UiLocale, UiStrings> = {
 		removeQueueAria: "Remove queued message",
 		previewImage: "[Image]",
 		previewFilePrefix: "[File]",
+		langLabel: "Language",
+		langOptEn: "English",
+		langOptZh: "繁體中文",
+		langOptAuto: "Auto (editor)",
+		pendingPasteRemoveAria: "Remove staged image",
 	},
 };
 

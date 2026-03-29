@@ -4,6 +4,8 @@
  */
 import { strings, type UiLocale } from "./i18n";
 
+type UiLanguageSetting = "en" | "zh" | "auto";
+
 declare function acquireVsCodeApi(): {
 	postMessage(message: unknown): void;
 };
@@ -29,6 +31,8 @@ const TAB_STORAGE_KEY = "mcpMessengerMainTab";
 let uiLocale: UiLocale = "en";
 /** 最近一次佇列資料，語系切換時重繪預覽。 */
 let lastQueue: unknown;
+/** 與 `mcpMessenger.uiLanguage` 同步（頂欄選單值）。 */
+let lastUiLanguageSetting: UiLanguageSetting = "en";
 
 function S() {
 	return strings(uiLocale);
@@ -58,10 +62,29 @@ function applyChrome(loc: UiLocale): void {
 	$("chromeComposerAttachHint").textContent = t.composerAttachHint;
 	$("chromeSendLabel").textContent = t.btnSend;
 	($("msgInput") as HTMLTextAreaElement).placeholder = t.placeholderInput;
+	$("btnRemovePendingPaste").setAttribute(
+		"aria-label",
+		t.pendingPasteRemoveAria
+	);
+	updateLanguageSelect(lastUiLanguageSetting);
+}
+
+/** 頂欄語言選單文案與目前設定值。 */
+function updateLanguageSelect(setting: UiLanguageSetting): void {
+	const t = S();
+	$("chromeLangLabel").textContent = t.langLabel;
+	const sel = $("uiLanguageSelect") as HTMLSelectElement;
+	sel.options[0]!.textContent = t.langOptEn;
+	sel.options[1]!.textContent = t.langOptZh;
+	sel.options[2]!.textContent = t.langOptAuto;
+	sel.value = setting;
 }
 
 /** 以 id 取得 DOM 節點（不存在時會拋錯，與面板 HTML 約定同步）。 */
 const $ = (id: string) => document.getElementById(id)!;
+
+/** 輸入框內 Ctrl+V 暫存之圖片（按「送出」才進佇列）。 */
+let pendingPaste: { b64: string; mime: string } | null = null;
 
 /** 主區「內容／Token（約略）」分頁切換，並寫入 sessionStorage 供下次開啟還原。 */
 function setMainTab(which: "main" | "token"): void {
@@ -264,6 +287,7 @@ window.addEventListener("message", (ev) => {
 	const m = ev.data as {
 		type?: string;
 		uiLocale?: UiLocale;
+		uiLanguageSetting?: UiLanguageSetting;
 		question?: unknown;
 		reply?: { content?: string } | null;
 		queue?: unknown;
@@ -271,6 +295,13 @@ window.addEventListener("message", (ev) => {
 	};
 	if (m.type === "state") {
 		lastQueue = m.queue;
+		if (
+			m.uiLanguageSetting === "en" ||
+			m.uiLanguageSetting === "zh" ||
+			m.uiLanguageSetting === "auto"
+		) {
+			lastUiLanguageSetting = m.uiLanguageSetting;
+		}
 		if (m.uiLocale === "en" || m.uiLocale === "zh") {
 			applyChrome(m.uiLocale);
 		}
@@ -284,13 +315,32 @@ window.addEventListener("message", (ev) => {
 const ta = $("msgInput") as HTMLTextAreaElement;
 const sendBtn = $("sendBtn") as HTMLButtonElement;
 
-/** 依輸入是否為空，啟用或停用「送出」按鈕。 */
+function renderPendingPaste(): void {
+	const strip = $("composerPasteStrip");
+	const thumb = $("composerPasteThumb") as HTMLImageElement;
+	if (!pendingPaste) {
+		strip.classList.add("hidden");
+		thumb.removeAttribute("src");
+		return;
+	}
+	strip.classList.remove("hidden");
+	thumb.src = `data:${pendingPaste.mime};base64,${pendingPaste.b64}`;
+}
+
+function clearPendingPaste(): void {
+	pendingPaste = null;
+	renderPendingPaste();
+	updateSend();
+}
+
+/** 依輸入或暫存貼圖，啟用或停用「送出」按鈕。 */
 function updateSend(): void {
-	sendBtn.disabled = !ta.value.trim();
+	const hasText = !!ta.value.trim();
+	sendBtn.disabled = !hasText && !pendingPaste;
 }
 
 ta.addEventListener("input", updateSend);
-/** 輸入框內 Ctrl+V 貼上剪貼簿圖片時寫入佇列（與「圖片」按鈕同效）。 */
+/** 輸入框內 Ctrl+V 貼上剪貼簿圖片時先暫存，按「送出」再進佇列。 */
 ta.addEventListener("paste", (e: ClipboardEvent) => {
 	const items = e.clipboardData?.items;
 	if (!items?.length) return;
@@ -306,11 +356,12 @@ ta.addEventListener("paste", (e: ClipboardEvent) => {
 			const comma = dataUrl.indexOf(",");
 			const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : "";
 			if (!b64) return;
-			vscode.postMessage({
-				type: "pasteImage",
-				base64: b64,
+			pendingPaste = {
+				b64,
 				mime: file.type || "image/png",
-			});
+			};
+			renderPendingPaste();
+			updateSend();
 		};
 		reader.readAsDataURL(file);
 		return;
@@ -323,11 +374,21 @@ ta.addEventListener("keydown", (e) => {
 	doSend();
 });
 
-/** 讀取輸入框並 `sendText` 至擴充，成功後清空輸入。 */
+/** 讀取輸入框／暫存貼圖並送至擴充，成功後清空。 */
 function doSend(): void {
 	const text = ta.value.trim();
-	if (!text) return;
-	vscode.postMessage({ type: "sendText", text });
+	if (!pendingPaste && !text) return;
+	if (pendingPaste) {
+		vscode.postMessage({
+			type: "sendComposer",
+			text,
+			base64: pendingPaste.b64,
+			mime: pendingPaste.mime,
+		});
+		clearPendingPaste();
+	} else {
+		vscode.postMessage({ type: "sendText", text });
+	}
 	ta.value = "";
 	updateSend();
 }
@@ -362,6 +423,19 @@ $("queuePreview").addEventListener("click", (e) => {
 });
 
 initMainTabs();
+
+$("btnRemovePendingPaste").addEventListener("click", () => {
+	clearPendingPaste();
+});
+
+$("uiLanguageSelect").addEventListener("change", () => {
+	const sel = $("uiLanguageSelect") as HTMLSelectElement;
+	const v = sel.value;
+	if (v === "en" || v === "zh" || v === "auto") {
+		vscode.postMessage({ type: "setUiLanguage", value: v });
+	}
+});
+
 applyChrome(uiLocale);
 
 /** Webview 載入完成後通知擴充，觸發首次 `pushState`。 */

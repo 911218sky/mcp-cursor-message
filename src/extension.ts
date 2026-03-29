@@ -39,6 +39,16 @@ let cachedPanelHtmlTemplate: string | undefined;
 /** 供 `resolvePanelUiLocale` 讀取設定（啟用時赋值）。 */
 let extensionContext: vscode.ExtensionContext | undefined;
 
+/** 讀取 `mcpMessenger.uiLanguage` 原始值（供 Webview 語言選單同步）。 */
+function getUiLanguageSetting(): "en" | "zh" | "auto" {
+	if (!extensionContext) return "en";
+	const mode = vscode.workspace
+		.getConfiguration("mcpMessenger")
+		.get<string>("uiLanguage", "en");
+	if (mode === "zh" || mode === "auto") return mode;
+	return "en";
+}
+
 /** 側欄 Webview 介面語系：設定優先，其次 VS Code `env.language`。 */
 function resolvePanelUiLocale(): "en" | "zh" {
 	if (!extensionContext) return "en";
@@ -78,7 +88,7 @@ function rebindMessengerDataDir(context: vscode.ExtensionContext): void {
 }
 
 /**
- * 與手動「安裝 MCP 設定」相同邏輯，於啟動／切換工作區時靜默執行（對齊常見打包版行為）。
+ * 與手動命令「Install MCP configuration」相同邏輯，於啟動／切換工作區時靜默執行（對齊常見打包版行為）。
  * 失敗只寫 console，避免每次開啟都跳干擾訊息。
  */
 function autoInstallMcpIfWorkspace(context: vscode.ExtensionContext): void {
@@ -203,7 +213,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		})
 	);
 
-	// 有工作區時靜默寫入 MCP 條目（與命令「安裝 MCP 設定」相同）；失敗只打 log。
+	// 有工作區時靜默寫入 MCP 條目（與命令 Install MCP configuration 相同）；失敗只打 log。
 	void autoInstallMcpIfWorkspace(context);
 }
 
@@ -241,6 +251,7 @@ async function pushStateToPanel(): Promise<void> {
 	void panelView.webview.postMessage({
 		type: "state",
 		uiLocale: resolvePanelUiLocale(),
+		uiLanguageSetting: getUiLanguageSetting(),
 		question,
 		reply: reply ? { content: reply.content } : null,
 		queue,
@@ -260,6 +271,31 @@ async function appendQueueWithTokenRecord(
 ): Promise<void> {
 	await appendQueue(dir, msg);
 	await recordTokensForQueueMessage(dir, msg);
+}
+
+/** 將剪貼簿圖片 base64 落檔至 `paste/`；過大或失敗時回 `undefined`。 */
+async function writePasteImageFromBase64(
+	dir: string,
+	base64: string,
+	mime: string
+): Promise<string | undefined> {
+	const maxB64 = 25 * 1024 * 1024;
+	if (base64.length > maxB64) {
+		void vscode.window.showWarningMessage(
+			"貼上的圖片過大，請改存檔後用「圖片」選取。"
+		);
+		return undefined;
+	}
+	let ext = "png";
+	if (/jpe?g/i.test(mime)) ext = "jpg";
+	else if (/gif/i.test(mime)) ext = "gif";
+	else if (/webp/i.test(mime)) ext = "webp";
+	else if (/bmp/i.test(mime)) ext = "bmp";
+	const sub = path.join(dir, "paste");
+	await fs.mkdir(sub, { recursive: true });
+	const fp = path.join(sub, `paste-${Date.now()}.${ext}`);
+	await fs.writeFile(fp, Buffer.from(base64, "base64"));
+	return fp;
 }
 
 /** 釋放 watcher 與側欄面板參考。 */
@@ -336,9 +372,56 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 					case "ready":
 						await pushStateToPanel();
 						break;
+					case "setUiLanguage": {
+						const v = String((msg as { value?: string }).value);
+						if (v === "en" || v === "zh" || v === "auto") {
+							await vscode.workspace
+								.getConfiguration("mcpMessenger")
+								.update(
+									"uiLanguage",
+									v,
+									vscode.ConfigurationTarget.Global
+								);
+						}
+						break;
+					}
 					case "sendText": {
 						const text = String(msg.text ?? "").trim();
 						if (text) {
+							await appendQueueWithTokenRecord(dir, {
+								type: "text",
+								content: text,
+							});
+						}
+						await pushStateToPanel();
+						break;
+					}
+					/** 輸入框送出：可僅文字、僅貼圖，或圖片加說明（說明寫入 image.caption）。 */
+					case "sendComposer": {
+						const text = String(
+							(msg as { text?: string }).text ?? ""
+						).trim();
+						const base64 = String(
+							(msg as { base64?: string }).base64 ?? ""
+						);
+						const mime = String(
+							(msg as { mime?: string }).mime ?? "image/png"
+						);
+						if (!text && !base64) break;
+						if (base64) {
+							const fp = await writePasteImageFromBase64(
+								dir,
+								base64,
+								mime
+							);
+							if (!fp) break;
+							const cap = text || undefined;
+							await appendQueueWithTokenRecord(dir, {
+								type: "image",
+								path: fp,
+								...(cap ? { caption: cap } : {}),
+							});
+						} else {
 							await appendQueueWithTokenRecord(dir, {
 								type: "text",
 								content: text,
@@ -378,38 +461,6 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 					// 使用者已讀代理回覆，刪除 reply 檔。
 					case "ackReply": {
 						await unlinkReply(dir);
-						await pushStateToPanel();
-						break;
-					}
-					// 剪貼簿圖片：落檔至 messenger-data/paste 再當 image 進佇列。
-					case "pasteImage": {
-						const base64 = String(
-							(msg as { base64?: string }).base64 ?? ""
-						);
-						const mime = String(
-							(msg as { mime?: string }).mime ?? "image/png"
-						);
-						if (!base64) break;
-						const maxB64 = 25 * 1024 * 1024;
-						if (base64.length > maxB64) {
-							void vscode.window.showWarningMessage(
-								"貼上的圖片過大，請改存檔後用「圖片」選取。"
-							);
-							break;
-						}
-						let ext = "png";
-						if (/jpe?g/i.test(mime)) ext = "jpg";
-						else if (/gif/i.test(mime)) ext = "gif";
-						else if (/webp/i.test(mime)) ext = "webp";
-						else if (/bmp/i.test(mime)) ext = "bmp";
-						const sub = path.join(dir, "paste");
-						await fs.mkdir(sub, { recursive: true });
-						const fp = path.join(sub, `paste-${Date.now()}.${ext}`);
-						await fs.writeFile(fp, Buffer.from(base64, "base64"));
-						await appendQueueWithTokenRecord(dir, {
-							type: "image",
-							path: fp,
-						});
 						await pushStateToPanel();
 						break;
 					}

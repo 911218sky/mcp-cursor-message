@@ -58,13 +58,16 @@ async function estimateDeltaForMessage(msg: QueueMsg): Promise<number> {
 		return estimateTextTokens(String(msg.content ?? ""));
 	}
 	if (msg.type === "image") {
+		let d = 0;
+		if (msg.caption) d += estimateTextTokens(msg.caption);
 		const fp = String(msg.path ?? "");
-		if (!fp) return 0;
+		if (!fp) return d;
 		try {
 			const st = await fs.stat(fp);
-			return estimateImageFileTokens(st.size);
+			d += estimateImageFileTokens(st.size);
+			return d;
 		} catch {
-			return 256;
+			return d + 256;
 		}
 	}
 	if (msg.type === "file") {

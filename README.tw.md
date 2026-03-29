@@ -19,10 +19,14 @@ MCP 旁路對話：在側欄以佇列與 MCP 工具（`check_messages`、`ask_qu
 
 | 元件 | 說明 |
 |------|------|
-| **VS Code／Cursor 擴充** | Activity Bar「MCP 對話」側欄、`messenger-data` 檔案 IPC、安裝／移除 MCP 設定命令 |
+| **VS Code／Cursor 擴充** | Activity Bar「**MCP chat**」側欄、`messenger-data` 檔案 IPC、安裝／移除 MCP 設定命令 |
 | **MCP 伺服器** | 與擴充共用資料目錄；暴露 `check_messages`、`ask_question`、`send_progress` 等工具 |
 
-適合希望**在編輯器內**完成「排程訊息／多選問答／進度推送」的流程，而不依賴純終端輸出。
+適合希望**在編輯器內**完成「排程訊息／多選問答／進度推送」的流程，而不依賴純終端輸出。側欄可檢視佇列、問答與回覆摘要；介面語言可在**頂部選單**切換，或於設定 **`mcpMessenger.uiLanguage`**（搜尋 **MCP chat**）選擇 **zh**／**auto**／**en**。有工作區時資料目錄為 `<工作區>/.cursor/messenger-data`（須與 MCP 的 **`MESSENGER_DATA_DIR`** 一致）。
+
+### 給 AI 助理（側欄佇列 + MCP）
+
+使用側欄佇列時，每輪回覆後請在 **`mcp-cursor-message`** MCP 伺服器上呼叫 **`check_messages`**，讓擴充能送出下一則訊息。
 
 ## 系統需求
 
@@ -48,18 +52,12 @@ bun run package
 
 完成後在儲存庫根目錄會產生 `.vsix`，再依上一節「從 VSIX 安裝」操作即可。
 
-### 安裝 MCP 設定（工作區）
+### 安裝 MCP 設定（工作區，命令為英文）
 
 1. 以**資料夾**開啟工作區。
-2. 命令面板（`Ctrl+Shift+P` / `Cmd+Shift+P`）執行 **`mcp-cursor-message: 安裝 MCP 設定`**。
+2. 命令面板（`Ctrl+Shift+P` / `Cmd+Shift+P`）執行 **`mcp-cursor-message: Install MCP configuration`**（命令標題為英文，與 `package.json` 一致）。
 3. 會寫入工作區 `.cursor/mcp.json` 與 `MESSENGER_DATA_DIR`；若 MCP 清單未更新，請**重啟 Cursor**。
-
-## 使用摘要
-
-- **側欄語言**：介面支援**繁中／英文**，**預設為英文**。設定搜尋 **MCP 對話** → **`mcpMessenger.uiLanguage`** 可改為 **zh**、**auto**（跟隨編輯器顯示語言）或維持 **en**。**單一 VSIX** 即含雙語。
-- **側欄**：檢視佇列、問答卡、回覆摘要；可依擴充命令與 MCP 工具更新內容。
-- **命令**（節錄）：安裝／卸載 MCP 設定、將檔案送入佇列、重設 token 約略統計（見 `package.json` `contributes.commands`）。
-- **資料目錄**：有工作區時為 `<工作區>/.cursor/messenger-data`；無工作區時為擴充 global storage 下之路徑（與 MCP 設定中的 `MESSENGER_DATA_DIR` 需一致）。
+4. **Cursor：** 開啟 **Cursor 設定 → MCP**，**啟用** **mcp-cursor-message** 伺服器（或確認已列出且為開啟）。側欄可不依 MCP 運作，但代理若未在 Cursor 內啟用 MCP，就**無法**呼叫 `check_messages`。
 
 ## 開發
 
@@ -87,7 +85,7 @@ git tag v9.0.0 && git push origin v9.0.0
 ## 疑難排解
 
 - **Webview 無法載入**（含 Service Worker 相關訊息）：多為編輯器內嵌 Chromium 已知類別問題，可嘗試關閉所有視窗後重開、更新 Cursor；詳見 [microsoft/vscode#125993](https://github.com/microsoft/vscode/issues/125993)。
-- **MCP 未出現**：確認已執行「安裝 MCP 設定」且已重啟；並檢查 `.cursor/mcp.json` 是否指向正確的伺服器啟動命令與 `MESSENGER_DATA_DIR`。
+- **MCP 未出現**／工具從未執行：確認已執行 **`mcp-cursor-message: Install MCP configuration`** 且已重啟；在 **Cursor 設定 → MCP** 啟用該伺服器；並檢查 `.cursor/mcp.json` 是否指向正確的伺服器啟動命令與 `MESSENGER_DATA_DIR`。
 
 ## 授權
 

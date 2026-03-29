@@ -41,6 +41,18 @@
 					</p>
 				</div>
 			</div>
+			<div class="topbar-lang" id="chromeLangWrap">
+				<label class="topbar-lang-label" for="uiLanguageSelect" id="chromeLangLabel">Language</label>
+				<select
+					id="uiLanguageSelect"
+					class="topbar-lang-select"
+					aria-labelledby="chromeLangLabel"
+				>
+					<option value="en">English</option>
+					<option value="zh">繁體中文</option>
+					<option value="auto">Auto</option>
+				</select>
+			</div>
 		</div>
 	</header>
 
@@ -161,6 +173,27 @@
 					placeholder="Type a message…"
 					spellcheck="false"
 				></textarea>
+				<div
+					class="composer-paste-strip hidden"
+					id="composerPasteStrip"
+					aria-live="polite"
+				>
+					<div class="composer-paste-thumb-wrap">
+						<img
+							id="composerPasteThumb"
+							class="composer-paste-thumb"
+							alt=""
+						/>
+						<button
+							type="button"
+							id="btnRemovePendingPaste"
+							class="composer-paste-remove"
+							aria-label="Remove staged image"
+						>
+							×
+						</button>
+					</div>
+				</div>
 			</div>
 			<div class="composer-attach" role="group" aria-label="Attach image or file">
 				<button type="button" id="btnPickImage" class="btn btn-attach">

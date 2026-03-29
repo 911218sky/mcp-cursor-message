@@ -28,7 +28,7 @@ flowchart LR
 
 ## 流程 0：安裝後發生什麼
 
-1. 使用者用資料夾開工作區，必要時執行「**安裝 MCP 設定**」：`mcp-config.ts` 會在 `.cursor/mcp.json` 寫入一條 MCP 條目，並把 **`MESSENGER_DATA_DIR`** 設成與擴充一致的路徑（有工作區時通常是 `<工作區>/.cursor/messenger-data`）。
+1. 使用者用資料夾開工作區，必要時執行命令 **`mcp-cursor-message: Install MCP configuration`**：`mcp-config.ts` 會在 `.cursor/mcp.json` 寫入一條 MCP 條目，並把 **`MESSENGER_DATA_DIR`** 設成與擴充一致的路徑（有工作區時通常是 `<工作區>/.cursor/messenger-data`）。
 2. 重啟 Cursor 後，MCP 子程序帶著這個環境變數啟動，`mcp-server/index.ts` 讀寫的檔案就會和擴充相同。
 3. 擴充啟用時會註冊側欄 Webview、監聽上述目錄的 `*.json` 變化；檔案一改就**防抖**後把最新佇列／問答／摘要推到 Webview。
 
@@ -118,7 +118,7 @@ sequenceDiagram
 | `question.json` | `ask_question` 寫入；側欄渲染 |
 | `answer.json` | 使用者提交後擴充寫入；MCP 讀取 |
 | `reply.json` | `check_messages` 的 `reply` 或 `send_progress` 的內容；側欄展示 |
-| `server.log` | MCP 除錯用（可選） |
+| `server.log` | MCP 除錯用（可選）；超過約 **1 MiB** 時自尾端截斷 |
 
 路徑必須對齊：**沒設好 `MESSENGER_DATA_DIR`，MCP 會用到程式內建 fallback 目錄，與擴充分離**，側欄和模型就會「各說各話」。
 

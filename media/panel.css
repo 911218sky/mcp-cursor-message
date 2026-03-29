@@ -125,15 +125,76 @@ body.app {
 }
 
 .topbar-inner {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
 	padding: 16px 16px 14px;
 	position: relative;
 	z-index: 1;
+}
+
+.topbar-lang {
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 4px;
+	padding-top: 2px;
+	max-width: 42%;
+}
+
+.topbar-lang-label {
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: color-mix(
+		in srgb,
+		var(--vscode-sideBar-foreground, var(--vscode-foreground)) 58%,
+		transparent
+	);
+	white-space: nowrap;
+}
+
+.topbar-lang-select {
+	font-family: var(--mcp-font-ui);
+	font-size: 12px;
+	line-height: 1.35;
+	padding: 5px 28px 5px 8px;
+	min-width: 0;
+	max-width: 100%;
+	border-radius: var(--mcp-radius-sm);
+	border: 1px solid var(--mcp-border-soft);
+	background: var(--mcp-surface-1);
+	color: var(--vscode-sideBar-foreground, var(--vscode-foreground));
+	cursor: pointer;
+	appearance: none;
+	background-image: linear-gradient(
+			45deg,
+			transparent 50%,
+			currentColor 50%
+		),
+		linear-gradient(135deg, currentColor 50%, transparent 50%);
+	background-position:
+		calc(100% - 14px) calc(50% - 2px),
+		calc(100% - 9px) calc(50% - 2px);
+	background-size: 5px 5px;
+	background-repeat: no-repeat;
+}
+
+.topbar-lang-select:focus {
+	outline: 1px solid var(--vscode-focusBorder, var(--mcp-accent-hi));
+	outline-offset: 1px;
 }
 
 .topbar-brand {
 	display: flex;
 	align-items: flex-start;
 	gap: 14px;
+	flex: 1;
+	min-width: 0;
 }
 
 .topbar-logo {
@@ -677,6 +738,55 @@ body.app {
 	box-shadow:
 		0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 35%, transparent),
 		0 0 0 4px color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 14%, transparent);
+}
+
+.composer-paste-strip {
+	padding: 0 12px 12px;
+}
+
+.composer-paste-strip.hidden {
+	display: none;
+}
+
+.composer-paste-thumb-wrap {
+	position: relative;
+	display: inline-block;
+	max-width: 100%;
+	vertical-align: top;
+}
+
+.composer-paste-thumb {
+	display: block;
+	max-height: 72px;
+	max-width: 100%;
+	border-radius: var(--mcp-radius-sm);
+	object-fit: contain;
+	background: color-mix(
+		in srgb,
+		var(--vscode-editor-background, #1e1e1e) 80%,
+		transparent
+	);
+}
+
+.composer-paste-remove {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: 999px;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+	color: var(--vscode-button-foreground, #fff);
+	background: color-mix(in srgb, var(--vscode-editor-background, #000) 55%, transparent);
+	box-shadow: var(--mcp-shadow-sm);
+}
+
+.composer-paste-remove:hover {
+	filter: brightness(1.12);
 }
 
 .composer-attach {

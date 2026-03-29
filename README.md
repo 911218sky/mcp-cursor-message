@@ -15,7 +15,11 @@ You are responsible for security and compliance. Output from this tool **does no
 
 ## What you get
 
-The project pairs a **sidebar extension** with an **MCP server**: both share a small on-disk message store so the model and the UI stay in sync. Typical uses include queued user input, multi-step Q&A with fixed options, and lightweight progress text shown next to the editor.
+The project pairs a **sidebar extension** with an **MCP server**: both share a small on-disk message store so the model and the UI stay in sync. Typical uses include queued user input, multi-step Q&A with fixed options, and lightweight progress text shown next to the editor. The sidebar shows the queue, Q&A cards, and reply summaries. **Language** is configurable from the panel header or **`mcpMessenger.uiLanguage`** (search **MCP chat** in Settings) for **zh**, **auto**, or **en**. With a folder workspace, the data directory is **`<workspace>/.cursor/messenger-data`** and must match **`MESSENGER_DATA_DIR`** in your MCP config.
+
+### For AI assistants (sidebar queue + MCP)
+
+After each reply when the sidebar queue is in use, call the **`check_messages`** tool on the **`mcp-cursor-message`** MCP server so the extension can deliver the next message.
 
 ## Requirements
 
@@ -25,8 +29,8 @@ The project pairs a **sidebar extension** with an **MCP server**: both share a s
 ## Quick start
 
 1. Install the latest **`.vsix`** from [**Releases**](https://github.com/911218sky/mcp-cursor-message/releases) via **Extensions → Install from VSIX…**, then reload the window.
-2. Open a **folder** workspace and run the command **mcp-cursor-message: 安裝 MCP 設定** from the Command Palette so MCP points at the same data directory as the sidebar. Restart the editor if MCP does not appear.
-3. **Sidebar language** defaults to **English**; change **`mcpMessenger.uiLanguage`** in Settings for **zh**, **auto**, or **en**.
+2. Open a **folder** workspace and run the command **mcp-cursor-message: Install MCP configuration** from the Command Palette so MCP points at the same data directory as the sidebar. Restart the editor if MCP does not appear.
+3. **Cursor:** Open **Cursor Settings → MCP** and **enable** the **mcp-cursor-message** server (or confirm it appears and is turned on). The sidebar works without this, but the agent **cannot** call `check_messages` until MCP is active for your workspace.
 
 ### Install from source
 
@@ -39,7 +43,12 @@ bun install
 bun run package
 ```
 
-The VSIX is written to the repository root (for example `mcp-cursor-message-9.0.0.vsix`, version from `package.json`).
+The VSIX is written to the repository root (for example `mcp-cursor-message-9.2.0.vsix`, version from `package.json`).
+
+## Troubleshooting
+
+- **Webview fails to load** (including Service Worker–related messages): often a known class of issues in the embedded Chromium; try closing all windows and reopening, or update Cursor. See [microsoft/vscode#125993](https://github.com/microsoft/vscode/issues/125993).
+- **MCP does not appear** / tools never run: confirm you ran **mcp-cursor-message: Install MCP configuration** and restarted; in **Cursor Settings → MCP**, enable the server; check `.cursor/mcp.json` for the correct server command and `MESSENGER_DATA_DIR`.
 
 ## Contributing & internals
 

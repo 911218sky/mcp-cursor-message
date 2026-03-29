@@ -44,6 +44,8 @@ const QUESTION_FILE = path.join(DATA_DIR, "question.json");
 const ANSWER_FILE = path.join(DATA_DIR, "answer.json");
 const REPLY_FILE = path.join(DATA_DIR, "reply.json");
 const LOG_FILE = path.join(DATA_DIR, "server.log");
+/** `server.log` 上限（位元組）；超過則自尾端保留至多此大小。 */
+const MAX_SERVER_LOG_BYTES = 1024 * 1024;
 
 /** 輪詢 queue / answer 的間隔（毫秒）。 */
 const POLL_INTERVAL = 100;
@@ -255,15 +257,30 @@ async function processMessage(
 
 // --- 日誌 -----------------------------------------------------------------
 
-/** 追加一行至 `server.log`（除錯與追蹤工具呼叫）。 */
+/** 若 `server.log` 超過 {@link MAX_SERVER_LOG_BYTES}，自尾端截斷（略過開頭不完整列）。 */
+async function trimServerLogIfNeeded(): Promise<void> {
+	let st;
+	try {
+		st = await fs.stat(LOG_FILE);
+	} catch {
+		return;
+	}
+	if (st.size <= MAX_SERVER_LOG_BYTES) return;
+	const buf = await fs.readFile(LOG_FILE);
+	if (buf.length <= MAX_SERVER_LOG_BYTES) return;
+	let start = buf.length - MAX_SERVER_LOG_BYTES;
+	while (start < buf.length && start > 0 && buf[start] !== 0x0a) start++;
+	if (start < buf.length) start++;
+	await fs.writeFile(LOG_FILE, buf.subarray(start));
+}
+
+/** 追加一行至 `server.log`（除錯與追蹤工具呼叫）；檔案不超過約 1 MiB。 */
 async function appendServerLog(level: string, message: string): Promise<void> {
 	try {
 		await ensureDataDir();
-		await fs.appendFile(
-			LOG_FILE,
-			`[${new Date().toISOString()}] [${level}] ${message}\n`,
-			"utf-8"
-		);
+		const line = `[${new Date().toISOString()}] [${level}] ${message}\n`;
+		await fs.appendFile(LOG_FILE, line, "utf-8");
+		await trimServerLogIfNeeded();
 	} catch {
 		/* 忽略寫入失敗 */
 	}
