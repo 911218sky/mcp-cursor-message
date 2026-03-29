@@ -6,6 +6,7 @@ import { strings, type UiLocale } from "./i18n";
 
 type UiLanguageSetting = "en" | "zh" | "auto";
 
+/** VS Code 在 Webview 內注入；僅能呼叫一次，取得與 extension host 通訊的 API。 */
 declare function acquireVsCodeApi(): {
 	postMessage(message: unknown): void;
 };
@@ -25,6 +26,7 @@ type QuestionPayload = {
 
 const vscode = acquireVsCodeApi();
 
+/** sessionStorage 鍵：記住使用者上次停留在「內容」或「Token」分頁。 */
 const TAB_STORAGE_KEY = "mcpMessengerMainTab";
 
 /** 目前介面語系（由 extension 依設定推送；首次載入預設英文以符合擴充預設）。 */
@@ -100,6 +102,7 @@ function setMainTab(which: "main" | "token"): void {
 	}
 }
 
+/** 還原上次選中的主分頁，並綁定「內容／Token」切換。 */
 function initMainTabs(): void {
 	let initial: "main" | "token" = "main";
 	try {
@@ -267,6 +270,7 @@ function renderQueuePreview(queue: unknown): void {
 	el.innerHTML = h;
 }
 
+/** 與 extension `pushStateToPanel` 推送之欄位對齊（見 ipc 讀檔）。 */
 type TokenStats = {
 	totalEstimated?: number;
 	lastMessageEstimated?: number;
@@ -289,6 +293,10 @@ function renderTokenStats(ts: TokenStats | undefined): void {
 			: "—";
 }
 
+/**
+ * 接收 extension host 送來的訊息（`webview.postMessage`）。
+ * `type === "state"` 時為完整狀態同步，對應擴充端 `pushStateToPanel`。
+ */
 window.addEventListener("message", (ev) => {
 	const m = ev.data as {
 		type?: string;
@@ -321,6 +329,7 @@ window.addEventListener("message", (ev) => {
 const ta = $("msgInput") as HTMLTextAreaElement;
 const sendBtn = $("sendBtn") as HTMLButtonElement;
 
+/** 更新輸入區下方暫存貼圖縮圖列（尚未送出）。 */
 function renderPendingPaste(): void {
 	const strip = $("composerPasteStrip");
 	const container = $("composerPasteThumbs");
@@ -355,6 +364,8 @@ function updateSend(): void {
 }
 
 ta.addEventListener("input", updateSend);
+
+/** 將剪貼簿中的圖檔讀成 base64，供 `pendingPastes` 暫存。 */
 function readClipboardImageFile(file: File): Promise<{ b64: string; mime: string } | null> {
 	return new Promise((resolve) => {
 		const reader = new FileReader();
@@ -399,6 +410,8 @@ ta.addEventListener("paste", (e: ClipboardEvent) => {
 		updateSend();
 	});
 });
+
+/** Enter：送出；Shift+Enter：換行（不送出）。 */
 ta.addEventListener("keydown", (e) => {
 	if (e.key !== "Enter") return;
 	if (e.shiftKey) return;
@@ -446,6 +459,7 @@ $("btnResetTokens").addEventListener("click", () => {
 	vscode.postMessage({ type: "resetTokenStats" });
 });
 
+/** 佇列預覽列：事件委派至 `.qp-remove`，避免每次重繪佇列時重綁多顆按鈕。 */
 $("queuePreview").addEventListener("click", (e) => {
 	const t = e.target as HTMLElement | null;
 	const btn = t?.closest?.(".qp-remove") as HTMLElement | null;
@@ -458,6 +472,7 @@ $("queuePreview").addEventListener("click", (e) => {
 
 initMainTabs();
 
+/** 暫存貼圖列：移除單張預覽（僅前端狀態，未送出前可刪）。 */
 $("composerPasteStrip").addEventListener("click", (ev) => {
 	const t = ev.target as HTMLElement | null;
 	const btn = t?.closest?.(".composer-paste-remove") as HTMLElement | null;
@@ -469,6 +484,7 @@ $("composerPasteStrip").addEventListener("click", (ev) => {
 	updateSend();
 });
 
+/** 變更頂欄語言後通知擴充寫入設定，下次 `state` 會帶回正確 `uiLocale`。 */
 $("uiLanguageSelect").addEventListener("change", () => {
 	const sel = $("uiLanguageSelect") as HTMLSelectElement;
 	const v = sel.value;
