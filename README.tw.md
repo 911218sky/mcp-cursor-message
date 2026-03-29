@@ -56,6 +56,7 @@ bun run package
 
 ## 使用摘要
 
+- **側欄語言**：介面支援**繁中／英文**，**預設為英文**。設定搜尋 **MCP 對話** → **`mcpMessenger.uiLanguage`** 可改為 **zh**、**auto**（跟隨編輯器顯示語言）或維持 **en**。**單一 VSIX** 即含雙語。
 - **側欄**：檢視佇列、問答卡、回覆摘要；可依擴充命令與 MCP 工具更新內容。
 - **命令**（節錄）：安裝／卸載 MCP 設定、將檔案送入佇列、重設 token 約略統計（見 `package.json` `contributes.commands`）。
 - **資料目錄**：有工作區時為 `<工作區>/.cursor/messenger-data`；無工作區時為擴充 global storage 下之路徑（與 MCP 設定中的 `MESSENGER_DATA_DIR` 需一致）。
@@ -73,7 +74,15 @@ bun run package
 
 ### CI
 
-推送至預設分支或發佈 **GitHub Release** 時， [`.github/workflows/package.yml`](./.github/workflows/package.yml) 會編譯打包並上傳成品（Release 時會附加 `.vsix`）。
+[`.github/workflows/package.yml`](./.github/workflows/package.yml) 在推送 **`main`** 時會編譯並上傳 **Actions 成品（Artifact）`vsix`**，可在該次 workflow 執行頁下載；**這不會自動出現在 GitHub 的 Releases 頁**。
+
+若要出現在 **Releases**：在 GitHub 網頁 **建立並發佈 Release**（會附加 `.vsix`），或推送版本標籤，例如：
+
+```bash
+git tag v9.0.0 && git push origin v9.0.0
+```
+
+符合 `v*` 的 tag 會觸發 workflow **建立 Release 並附上** 打包好的 `.vsix`。
 
 ## 疑難排解
 
@@ -86,6 +95,5 @@ bun run package
 
 ## 連結
 
-- **儲存庫**：[github.com/911218sky/mcp-cursor-message](https://github.com/911218sky/mcp-cursor-message)
 - **英文說明**：[README.md](./README.md)
 - **維護者**：[運作流程](./PROJECT.md) · [AI 協作指南](./AGENTS.md)

@@ -2,6 +2,8 @@
  * 側欄 Webview 腳本（打包為 dist/webview.js）。
  * 負責渲染佇列／問答／摘要，並以 `postMessage` 與 extension host 通訊。
  */
+import { strings, type UiLocale } from "./i18n";
+
 declare function acquireVsCodeApi(): {
 	postMessage(message: unknown): void;
 };
@@ -22,6 +24,41 @@ type QuestionPayload = {
 const vscode = acquireVsCodeApi();
 
 const TAB_STORAGE_KEY = "mcpMessengerMainTab";
+
+/** 目前介面語系（由 extension 依設定推送；首次載入預設英文以符合擴充預設）。 */
+let uiLocale: UiLocale = "en";
+/** 最近一次佇列資料，語系切換時重繪預覽。 */
+let lastQueue: unknown;
+
+function S() {
+	return strings(uiLocale);
+}
+
+/** 套用靜態 Chrome 文案（頂欄、分頁、輸入區等）；動態區塊由後續 render* 更新。 */
+function applyChrome(loc: UiLocale): void {
+	uiLocale = loc;
+	const t = S();
+	$("chromeTopbarTitle").textContent = t.topbarTitle;
+	$("chromeTopbarSub").innerHTML = t.topbarSubHtml;
+	$("chromeTabMain").textContent = t.tabMain;
+	$("chromeTabToken").textContent = t.tabToken;
+	$("chromeQuestionCardTitle").textContent = t.questionCardTitle;
+	$("chromeReplyTitle").textContent = t.replyCardTitle;
+	$("replyAck").textContent = t.replyAck;
+	$("chromeQueueTitle").textContent = t.queueTitle;
+	$("chromeTokenCardTitle").textContent = t.tokenCardTitle;
+	$("chromeTokenHint").textContent = t.tokenHint;
+	$("chromeTokenTotalLabel").textContent = t.tokenTotal;
+	$("chromeTokenLastLabel").textContent = t.tokenLast;
+	$("btnResetTokens").textContent = t.tokenReset;
+	$("chromeComposerLabel").textContent = t.composerLabel;
+	$("chromeComposerHint").textContent = t.composerHint;
+	$("chromeBtnImageLabel").textContent = t.btnImage;
+	$("chromeBtnFileLabel").textContent = t.btnFile;
+	$("chromeComposerAttachHint").textContent = t.composerAttachHint;
+	$("chromeSendLabel").textContent = t.btnSend;
+	($("msgInput") as HTMLTextAreaElement).placeholder = t.placeholderInput;
+}
 
 /** 以 id 取得 DOM 節點（不存在時會拋錯，與面板 HTML 約定同步）。 */
 const $ = (id: string) => document.getElementById(id)!;
@@ -86,6 +123,7 @@ function renderQuestion(q: QuestionPayload | null): void {
 	}
 	curQuestion = q;
 	Object.keys(selectedAnswers).forEach((k) => delete selectedAnswers[k]);
+	const tr = S();
 	let h = "";
 	for (const qi of q.questions) {
 		selectedAnswers[qi.id] = [];
@@ -98,11 +136,10 @@ function renderQuestion(q: QuestionPayload | null): void {
 			h += `<span class="check"></span><span>${esc(opt.label)}</span></div>`;
 		}
 		h += `</div>`;
-		h += `<input class="q-other" data-qid="${esc(qi.id)}" placeholder="補充說明（可選）">`;
+		h += `<input class="q-other" data-qid="${esc(qi.id)}" placeholder="${esc(tr.qOtherPlaceholder)}">`;
 		h += `</div>`;
 	}
-	h +=
-		'<div class="q-actions"><button type="button" class="btn btn-danger btn-sm" id="btnCancelQ">取消</button><button type="button" class="btn btn-warn btn-sm" id="btnSubmitQ">提交回答</button></div>';
+	h += `<div class="q-actions"><button type="button" class="btn btn-danger btn-sm" id="btnCancelQ">${esc(tr.qCancel)}</button><button type="button" class="btn btn-warn btn-sm" id="btnSubmitQ">${esc(tr.qSubmit)}</button></div>`;
 	body.innerHTML = h;
 	card.classList.remove("hidden");
 
@@ -177,20 +214,26 @@ function renderReply(content: string | undefined): void {
 /** 將佇列預覽為簡短列表（文字截斷、圖片／檔案標籤）。 */
 function renderQueuePreview(queue: unknown): void {
 	const el = $("queuePreview");
+	const tr = S();
 	if (!Array.isArray(queue) || queue.length === 0) {
-		el.innerHTML = '<p class="muted">佇列為空</p>';
+		el.innerHTML = `<p class="muted">${esc(tr.queueEmpty)}</p>`;
 		return;
 	}
 	let h = "";
+	let i = 0;
 	for (const it of queue as { type?: string; content?: string; path?: string }[]) {
 		const tp = it.type ?? "text";
 		const preview =
 			tp === "text"
 				? (it.content ?? "").slice(0, 80)
 				: tp === "image"
-					? "[圖片]"
-					: "[檔案] " + String(it.path ?? "").split(/[/\\]/).pop();
-		h += `<div class="qp">${esc(preview)}</div>`;
+					? tr.previewImage
+					: `${tr.previewFilePrefix} ${String(it.path ?? "").split(/[/\\]/).pop() ?? ""}`;
+		h += `<div class="qp" role="group">`;
+		h += `<span class="qp-text">${esc(preview)}</span>`;
+		h += `<button type="button" class="qp-remove" data-index="${i}" title="${esc(tr.removeQueueTitle)}" aria-label="${esc(tr.removeQueueAria)}">${esc(tr.removeQueue)}</button>`;
+		h += `</div>`;
+		i += 1;
 	}
 	el.innerHTML = h;
 }
@@ -220,12 +263,17 @@ function renderTokenStats(ts: TokenStats | undefined): void {
 window.addEventListener("message", (ev) => {
 	const m = ev.data as {
 		type?: string;
+		uiLocale?: UiLocale;
 		question?: unknown;
 		reply?: { content?: string } | null;
 		queue?: unknown;
 		tokenStats?: TokenStats;
 	};
 	if (m.type === "state") {
+		lastQueue = m.queue;
+		if (m.uiLocale === "en" || m.uiLocale === "zh") {
+			applyChrome(m.uiLocale);
+		}
 		renderQuestion((m.question as QuestionPayload | null) ?? null);
 		renderReply(m.reply?.content);
 		renderQueuePreview(m.queue);
@@ -303,7 +351,18 @@ $("btnResetTokens").addEventListener("click", () => {
 	vscode.postMessage({ type: "resetTokenStats" });
 });
 
+$("queuePreview").addEventListener("click", (e) => {
+	const t = e.target as HTMLElement | null;
+	const btn = t?.closest?.(".qp-remove") as HTMLElement | null;
+	if (!btn) return;
+	e.preventDefault();
+	const idx = Number(btn.getAttribute("data-index"));
+	if (!Number.isInteger(idx) || idx < 0) return;
+	vscode.postMessage({ type: "removeQueueItem", index: idx });
+});
+
 initMainTabs();
+applyChrome(uiLocale);
 
 /** Webview 載入完成後通知擴充，觸發首次 `pushState`。 */
 vscode.postMessage({ type: "ready" });

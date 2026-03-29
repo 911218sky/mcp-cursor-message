@@ -40,6 +40,18 @@
 - 架構／IPC／程序圖變更：更新 **PROJECT.md**。
 - PR 描述請說明**行為影響**（擴充、MCP、或僅 CI／文件），無需贅字。
 
+## 版本與發佈（Semantic Versioning）
+
+`package.json` 的 **`version`** 採 **SemVer `MAJOR.MINOR.PATCH`**（例：`9.0.0`）。發 GitHub Release／打 tag 前，**tag 名稱須與此版號一致**（例：`v9.0.1` 對應 `9.0.1`），見 [`.github/workflows/package.yml`](./.github/workflows/package.yml)。
+
+| 位 | 何時遞增 | 範例 |
+|----|----------|------|
+| **PATCH**（最後一位） | 修正 bug、小調整、**向後相容**且不改公開契約 | `9.0.0` → `9.0.1` |
+| **MINOR**（中間） | **較大功能**或行為擴充，仍盡量**向後相容**（舊 MCP／舊外掛升級後不應壞） | `9.0.1` → `9.1.0` |
+| **MAJOR**（第一位） | **不相容變更**：IPC 檔格式、`MESSENGER_DATA_DIR` 語意、MCP 工具簽名、`mcp.json` 鍵名、擴充對使用者可見 breaking 等 | `9.1.0` → `10.0.0` |
+
+發佈前檢查：`bun run package` 成功；若動到 IPC／工具，已更新 **PROJECT.md** 與相關型別，並在 Release note 註明升級提示。
+
 ## 參考連結
 
 - [README.md](./README.md) — 安裝與使用

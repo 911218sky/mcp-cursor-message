@@ -1,5 +1,7 @@
 PROJECT.md
 INSTALL.md
+.cursor/**
+.github/**
 bun.lock
 node_modules/**
 mcp-server/**
@@ -8,3 +10,4 @@ tsconfig.json
 *.vsix
 .gitignore
 **/*.map
+dist/mcp-server-simple.mjs

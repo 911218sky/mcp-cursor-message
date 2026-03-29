@@ -61,6 +61,21 @@ export async function appendQueue(
 	await writeQueue(dataDir, q);
 }
 
+/**
+ * 依索引自 `queue.json` 移除一則訊息（側欄「撤銷」）；索引以目前檔案順序為準。
+ * 回傳被移除項目供 token 統計回沖；無效索引回 `null`。
+ */
+export async function removeQueueItemAtIndex(
+	dataDir: string,
+	index: number
+): Promise<QueueMsgStored | null> {
+	const q = await readQueue(dataDir);
+	if (index < 0 || index >= q.length) return null;
+	const removed = q.splice(index, 1)[0];
+	await writeQueue(dataDir, q);
+	return removed ?? null;
+}
+
 /** 讀取 MCP 寫入的 `question.json`（`ask_question` 待答題目）；無檔時回 `null`。 */
 export async function readQuestion(dataDir: string): Promise<unknown | null> {
 	const { questionFile } = getIpcPaths(dataDir);

@@ -52,40 +52,66 @@ export async function resetTokenStats(dataDir: string): Promise<void> {
 	}
 }
 
+/** 與 `recordTokensForQueueMessage` 相同之單則約略 token 增量。 */
+async function estimateDeltaForMessage(msg: QueueMsg): Promise<number> {
+	if (msg.type === "text") {
+		return estimateTextTokens(String(msg.content ?? ""));
+	}
+	if (msg.type === "image") {
+		const fp = String(msg.path ?? "");
+		if (!fp) return 0;
+		try {
+			const st = await fs.stat(fp);
+			return estimateImageFileTokens(st.size);
+		} catch {
+			return 256;
+		}
+	}
+	if (msg.type === "file") {
+		const fp = String(msg.path ?? "");
+		if (!fp) return 0;
+		try {
+			const st = await fs.stat(fp);
+			return await estimateFileTokens(fp, st.size);
+		} catch {
+			return 32;
+		}
+	}
+	return 0;
+}
+
 /** 依佇列訊息估算 token，累加寫入 `token-stats.json`。 */
 export async function recordTokensForQueueMessage(
 	dataDir: string,
 	msg: QueueMsg
 ): Promise<TokenStatsPayload> {
-	let delta = 0;
-	if (msg.type === "text") {
-		delta = estimateTextTokens(String(msg.content ?? ""));
-	} else if (msg.type === "image") {
-		const fp = String(msg.path ?? "");
-		if (fp) {
-			try {
-				const st = await fs.stat(fp);
-				delta = estimateImageFileTokens(st.size);
-			} catch {
-				delta = 256;
-			}
-		}
-	} else if (msg.type === "file") {
-		const fp = String(msg.path ?? "");
-		if (fp) {
-			try {
-				const st = await fs.stat(fp);
-				delta = await estimateFileTokens(fp, st.size);
-			} catch {
-				delta = 32;
-			}
-		}
-	}
+	const delta = await estimateDeltaForMessage(msg);
 
 	const prev = await readTokenStats(dataDir);
 	const next: TokenStatsPayload = {
 		totalEstimated: prev.totalEstimated + delta,
 		lastMessageEstimated: delta,
+		updatedAt: new Date().toISOString(),
+	};
+	await fs.mkdir(dataDir, { recursive: true });
+	await fs.writeFile(
+		pathFor(dataDir),
+		JSON.stringify(next, null, 2),
+		"utf-8"
+	);
+	return next;
+}
+
+/** 自累計約略 token 扣除一則佇列訊息（撤銷送出時呼叫）。 */
+export async function subtractTokensForQueueMessage(
+	dataDir: string,
+	msg: QueueMsg
+): Promise<TokenStatsPayload> {
+	const delta = await estimateDeltaForMessage(msg);
+	const prev = await readTokenStats(dataDir);
+	const next: TokenStatsPayload = {
+		totalEstimated: Math.max(0, prev.totalEstimated - delta),
+		lastMessageEstimated: 0,
 		updatedAt: new Date().toISOString(),
 	};
 	await fs.mkdir(dataDir, { recursive: true });

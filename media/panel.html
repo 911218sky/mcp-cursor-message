@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
 	<meta charset="UTF-8" />
 	<meta
@@ -11,7 +11,7 @@
 	<link rel="stylesheet" href="{{STYLE_URI}}" />
 </head>
 <body class="app">
-	<header class="topbar" aria-label="標題列">
+	<header class="topbar" aria-label="Header">
 		<div class="topbar-accent" aria-hidden="true"></div>
 		<div class="topbar-inner">
 			<div class="topbar-brand">
@@ -33,11 +33,11 @@
 				</div>
 				<div class="topbar-titles">
 					<div class="topbar-heading">
-						<span class="topbar-title">MCP 對話</span>
+						<span class="topbar-title" id="chromeTopbarTitle">MCP chat</span>
 						<span class="topbar-badge" title="Model Context Protocol">MCP</span>
 					</div>
-					<p class="topbar-sub">
-						佇列送入 Cursor · 模型以 <code>check_messages</code> 拉取
+					<p class="topbar-sub" id="chromeTopbarSub">
+						Queue into Cursor · model pulls with <code>check_messages</code>
 					</p>
 				</div>
 			</div>
@@ -45,7 +45,7 @@
 	</header>
 
 	<main class="scroll" id="mainScroll">
-		<div class="main-tabs" role="tablist" aria-label="主區分頁">
+		<div class="main-tabs" role="tablist" aria-label="Main tabs">
 			<button
 				type="button"
 				class="main-tab"
@@ -62,7 +62,7 @@
 						stroke-linecap="round"
 					/>
 				</svg>
-				<span class="main-tab-text">內容</span>
+				<span class="main-tab-text" id="chromeTabMain">Content</span>
 			</button>
 			<button
 				type="button"
@@ -81,7 +81,7 @@
 					/>
 					<circle cx="17" cy="7" r="2" fill="currentColor" />
 				</svg>
-				<span class="main-tab-text">Token</span>
+				<span class="main-tab-text" id="chromeTabToken">Token</span>
 			</button>
 		</div>
 
@@ -89,7 +89,7 @@
 		<div id="questionCard" class="card card--question hidden">
 			<div class="card-head">
 				<span class="card-icon card-icon--q" aria-hidden="true"></span>
-				<div class="card-title">需要你的選擇</div>
+				<div class="card-title" id="chromeQuestionCardTitle">Your choice needed</div>
 			</div>
 			<div id="questionBody"></div>
 		</div>
@@ -97,16 +97,18 @@
 		<div id="replyCard" class="card card--reply hidden">
 			<div class="card-head">
 				<span class="card-icon card-icon--reply" aria-hidden="true"></span>
-				<div class="card-title">AI 回覆摘要</div>
+				<div class="card-title" id="chromeReplyTitle">AI reply summary</div>
 			</div>
 			<div id="replyContent" class="reply-content"></div>
-			<button id="replyAck" class="btn btn-ghost btn-block" type="button">已閱</button>
+			<button id="replyAck" class="btn btn-ghost btn-block" type="button">
+				Dismiss
+			</button>
 		</div>
 
 		<div class="card card--queue">
 			<div class="card-head">
 				<span class="card-icon card-icon--queue" aria-hidden="true"></span>
-				<div class="card-title">待送佇列</div>
+				<div class="card-title" id="chromeQueueTitle">Outbound queue</div>
 			</div>
 			<div id="queuePreview" class="queue-preview"></div>
 		</div>
@@ -118,47 +120,49 @@
 			role="tabpanel"
 			aria-labelledby="tabToken"
 		>
-			<section class="card card--token" aria-label="佇列 token 約略統計">
+			<section class="card card--token" aria-label="Approximate queue token stats">
 				<div class="card-head">
 					<span class="card-icon card-icon--tok" aria-hidden="true"></span>
-					<div class="card-title">佇列 Token（約略）</div>
+					<div class="card-title" id="chromeTokenCardTitle">Queue tokens (estimate)</div>
 				</div>
-				<p class="token-hint">
-					統計本側欄送入佇列的文字／圖片／檔案，非 Cursor 官方帳單。
+				<p class="token-hint" id="chromeTokenHint">
+					Approximate tokens for sidebar-queued text/images/files—not Cursor billing.
 				</p>
 				<div class="token-grid">
 					<div class="token-cell">
-						<span class="token-label">累計</span>
+						<span class="token-label" id="chromeTokenTotalLabel">Total</span>
 						<strong class="token-val" id="tokenTotal">—</strong>
 					</div>
 					<div class="token-cell">
-						<span class="token-label">上一則</span>
+						<span class="token-label" id="chromeTokenLastLabel">Last</span>
 						<strong class="token-val" id="tokenLast">—</strong>
 					</div>
 				</div>
 				<button type="button" class="btn btn-ghost btn-block token-reset-btn" id="btnResetTokens">
-					重設統計
+					Reset stats
 				</button>
 			</section>
 		</div>
 	</main>
 
-	<footer class="composer" aria-label="輸入區">
+	<footer class="composer" aria-label="Composer">
 		<div class="composer-panel">
 			<label class="composer-label" for="msgInput">
-				<span class="composer-label-text">傳給 AI</span>
-				<span class="composer-kbd-hint">Enter 送出 · Shift+Enter 換行 · 可貼上剪貼簿圖片</span>
+				<span class="composer-label-text" id="chromeComposerLabel">To AI</span>
+				<span class="composer-kbd-hint" id="chromeComposerHint"
+					>Enter to send · Shift+Enter newline · paste images from clipboard</span
+				>
 			</label>
 			<div class="composer-field">
 				<textarea
 					id="msgInput"
 					class="compose-input"
 					rows="3"
-					placeholder="輸入訊息…"
+					placeholder="Type a message…"
 					spellcheck="false"
 				></textarea>
 			</div>
-			<div class="composer-attach" role="group" aria-label="附加圖片或檔案">
+			<div class="composer-attach" role="group" aria-label="Attach image or file">
 				<button type="button" id="btnPickImage" class="btn btn-attach">
 					<svg class="btn-attach-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 						<rect
@@ -179,7 +183,7 @@
 							stroke-linejoin="round"
 						/>
 					</svg>
-					圖片
+					<span id="chromeBtnImageLabel">Image</span>
 				</button>
 				<button type="button" id="btnPickFile" class="btn btn-attach">
 					<svg class="btn-attach-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -191,11 +195,13 @@
 						/>
 						<polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
 					</svg>
-					檔案
+					<span id="chromeBtnFileLabel">File</span>
 				</button>
 			</div>
 			<div class="composer-row">
-				<span class="hint" aria-hidden="true">選擇器加入附件 · 輸入框內 Ctrl+V 貼圖</span>
+				<span class="hint" aria-hidden="true" id="chromeComposerAttachHint"
+					>Pick attachments · Ctrl+V paste image in box</span
+				>
 				<button id="sendBtn" class="btn btn-primary btn-send" type="button" disabled>
 					<svg class="btn-send-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
 						<path
@@ -206,7 +212,7 @@
 							stroke-linejoin="round"
 						/>
 					</svg>
-					<span class="btn-send-label">送出</span>
+					<span class="btn-send-label" id="chromeSendLabel">Send</span>
 				</button>
 			</div>
 		</div>

@@ -11,6 +11,7 @@ import {
 	readQuestion,
 	readQueue,
 	readReply,
+	removeQueueItemAtIndex,
 	unlinkReply,
 	writeAnswerFile,
 } from "./ipc";
@@ -20,6 +21,7 @@ import {
 	readTokenStats,
 	recordTokensForQueueMessage,
 	resetTokenStats,
+	subtractTokensForQueueMessage,
 } from "./token-stats";
 
 /** 目前 IPC 根目錄（工作區或 globalStorage 下的 messenger-data）。 */
@@ -33,6 +35,22 @@ let debounceTimer: NodeJS.Timeout | undefined;
 
 /** `panel.html` 原始模板（僅 nonce／URI 每輪替換），避免 `resolveWebviewView` 重入時重複讀檔。 */
 let cachedPanelHtmlTemplate: string | undefined;
+
+/** 供 `resolvePanelUiLocale` 讀取設定（啟用時赋值）。 */
+let extensionContext: vscode.ExtensionContext | undefined;
+
+/** 側欄 Webview 介面語系：設定優先，其次 VS Code `env.language`。 */
+function resolvePanelUiLocale(): "en" | "zh" {
+	if (!extensionContext) return "en";
+	const mode = vscode.workspace
+		.getConfiguration("mcpMessenger")
+		.get<string>("uiLanguage", "en");
+	if (mode === "en") return "en";
+	if (mode === "zh") return "zh";
+	const lang = vscode.env.language.toLowerCase();
+	if (lang.startsWith("en")) return "en";
+	return "zh";
+}
 
 /**
  * 解析 IPC 根目錄；須與 `mcp-config` 寫入 `.cursor/mcp.json` 的 `MESSENGER_DATA_DIR` 一致。
@@ -74,6 +92,7 @@ function autoInstallMcpIfWorkspace(context: vscode.ExtensionContext): void {
 
 /** 擴充啟用：註冊 Webview、命令、資料夾監聽與工作區變更。 */
 export function activate(context: vscode.ExtensionContext): void {
+	extensionContext = context;
 	dataDir = messengerDataDirForContext(context);
 	void ensureDataDir(dataDir);
 
@@ -176,6 +195,14 @@ export function activate(context: vscode.ExtensionContext): void {
 		})
 	);
 
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration((e) => {
+			if (e.affectsConfiguration("mcpMessenger.uiLanguage")) {
+				schedulePushState();
+			}
+		})
+	);
+
 	// 有工作區時靜默寫入 MCP 條目（與命令「安裝 MCP 設定」相同）；失敗只打 log。
 	void autoInstallMcpIfWorkspace(context);
 }
@@ -213,6 +240,7 @@ async function pushStateToPanel(): Promise<void> {
 	const tokenStats = await readTokenStats(dataDir);
 	void panelView.webview.postMessage({
 		type: "state",
+		uiLocale: resolvePanelUiLocale(),
 		question,
 		reply: reply ? { content: reply.content } : null,
 		queue,
@@ -243,6 +271,7 @@ function deactivateExtension(): void {
 
 /** VS Code 擴充停用時呼叫。 */
 export function deactivate(): void {
+	extensionContext = undefined;
 	deactivateExtension();
 }
 
@@ -320,6 +349,16 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 					}
 					case "resetTokenStats": {
 						await resetTokenStats(dir);
+						await pushStateToPanel();
+						break;
+					}
+					case "removeQueueItem": {
+						const index = Number((msg as { index?: unknown }).index);
+						if (!Number.isInteger(index) || index < 0) break;
+						const removed = await removeQueueItemAtIndex(dir, index);
+						if (removed) {
+							await subtractTokensForQueueMessage(dir, removed);
+						}
 						await pushStateToPanel();
 						break;
 					}

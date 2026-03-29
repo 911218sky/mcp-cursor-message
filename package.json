@@ -61,6 +61,17 @@
 					"group": "navigation@100"
 				}
 			]
+		},
+		"configuration": {
+			"title": "MCP 對話",
+			"properties": {
+				"mcpMessenger.uiLanguage": {
+					"type": "string",
+					"enum": ["en", "zh", "auto"],
+					"default": "en",
+					"description": "側欄 Webview 介面語言。預設英文；auto＝沿用 VS Code／Cursor 顯示語言。"
+				}
+			}
 		}
 	},
 	"scripts": {

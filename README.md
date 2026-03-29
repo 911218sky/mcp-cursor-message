@@ -1,6 +1,6 @@
 # mcp-cursor-message
 
-MCP side-channel chat: a sidebar queue and MCP tools (`check_messages`, `ask_question`, etc.) bridge Cursor so agents can push summaries, structured prompts, and read user replies.
+**MCP side-channel chat for Cursor and VS Code.** Queue messages from a sidebar, let your agent pull them with `check_messages`, run structured `ask_question` flows, and surface progress—without juggling copy-paste in the terminal.
 
 *Traditional Chinese:* [README.tw.md](./README.tw.md)
 
@@ -9,33 +9,28 @@ MCP side-channel chat: a sidebar queue and MCP tools (`check_messages`, `ask_que
 
 ## Disclaimer
 
-This project is provided **for academic exchange and technical research only**. The repository, extension, and MCP server are offered **as-is**, **without warranty of any kind**, whether express or implied (including but not limited to merchantability, fitness for a particular purpose, or non-infringement). The authors and contributors **are not liable** for any direct, indirect, incidental, or consequential damages arising from use or inability to use this software.
+This project is provided **for academic exchange and technical research only**. The repository, extension, and MCP server are offered **as-is**, **without warranty of any kind**, whether express or implied. The authors and contributors **are not liable** for any damages arising from use or inability to use this software.
 
-You are responsible for security and compliance (data handling, API keys, third-party services, and applicable laws). Content produced or sent through this tool **does not constitute** legal, medical, financial, or any other professional advice. If you do not agree, do not download, install, or use this software.
+You are responsible for security and compliance. Output from this tool **does not constitute** professional advice. If you do not agree, do not download, install, or use this software.
 
-## Overview
+## What you get
 
-| Component | Role |
-|-----------|------|
-| **VS Code / Cursor extension** | Activity Bar sidebar “MCP 對話”, file-based IPC under `messenger-data`, commands to install/remove MCP config |
-| **MCP server** | Shares the same data directory with the extension; exposes `check_messages`, `ask_question`, `send_progress`, and related tools |
-
-Useful when you want **in-editor** flows for queued messages, multi-choice Q&A, and progress updates instead of relying only on the terminal.
+The project pairs a **sidebar extension** with an **MCP server**: both share a small on-disk message store so the model and the UI stay in sync. Typical uses include queued user input, multi-step Q&A with fixed options, and lightweight progress text shown next to the editor.
 
 ## Requirements
 
-- **Cursor** or **Visual Studio Code** (engine **^1.105.0**; see `package.json`)
-- **[Bun](https://bun.sh)** on your machine to build a `.vsix` (matches the `packageManager` field)
+- **Cursor** or **Visual Studio Code** (see `engines.vscode` in `package.json`)
+- **Bun** only if you build the `.vsix` from source
 
-## Installation
+## Quick start
 
-### From GitHub Releases (recommended)
+1. Install the latest **`.vsix`** from [**Releases**](https://github.com/911218sky/mcp-cursor-message/releases) via **Extensions → Install from VSIX…**, then reload the window.
+2. Open a **folder** workspace and run the command **mcp-cursor-message: 安裝 MCP 設定** from the Command Palette so MCP points at the same data directory as the sidebar. Restart the editor if MCP does not appear.
+3. **Sidebar language** defaults to **English**; change **`mcpMessenger.uiLanguage`** in Settings for **zh**, **auto**, or **en**.
 
-1. Download the latest `.vsix` from [**Releases**](https://github.com/911218sky/mcp-cursor-message/releases).
-2. In Cursor / VS Code: Extensions → `⋯` → **Install from VSIX…** → pick the file.
-3. **Reload the window** when prompted.
+### Install from source
 
-### Build from source
+Clone the repository, install dependencies with **Bun**, build the extension package, then install the generated `.vsix` the same way as a release build:
 
 ```bash
 git clone https://github.com/911218sky/mcp-cursor-message.git
@@ -44,46 +39,12 @@ bun install
 bun run package
 ```
 
-A `.vsix` appears in the repo root; install it as above.
+The VSIX is written to the repository root (for example `mcp-cursor-message-9.0.0.vsix`, version from `package.json`).
 
-### MCP config (workspace)
+## Contributing & internals
 
-1. Open a **folder** as your workspace.
-2. Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) → run **`mcp-cursor-message: 安裝 MCP 設定`** (command title may stay Chinese depending on locale).
-3. This writes `.cursor/mcp.json` and `MESSENGER_DATA_DIR` for the workspace. **Restart Cursor** if MCP does not show up.
-
-## Usage summary
-
-- **Sidebar**: queue, Q&A card, reply/progress summaries; updated via extension commands and MCP tools.
-- **Commands** (see `package.json` → `contributes.commands`): install/remove MCP config, enqueue files, reset approximate token stats, etc.
-- **Data directory**: with a workspace it is `<workspace>/.cursor/messenger-data`; without a folder it lives under the extension’s global storage path. It must stay aligned with `MESSENGER_DATA_DIR` in MCP config.
-
-## Development
-
-| Command | Purpose |
-|---------|---------|
-| `bun run compile` | Build MCP bundle + extension + webview |
-| `bun run compile:mcp` | Build `dist/mcp-server.mjs` only |
-| `bun run compile:ext` | Build `dist/extension.js` and `dist/webview.js` only |
-| `bun run package` | Build and run `vsce` to emit `.vsix` |
-
-Build definitions live in [`esbuild.config.mjs`](./esbuild.config.mjs).
-
-### CI
-
-[`.github/workflows/package.yml`](./.github/workflows/package.yml) compiles and uploads artifacts on push to the default branch; publishing a **GitHub Release** attaches the `.vsix`.
-
-## Troubleshooting
-
-- **Webview fails to load** (including Service Worker errors): often upstream editor/Chromium behavior—try closing all windows and reopening, or update Cursor. See [microsoft/vscode#125993](https://github.com/microsoft/vscode/issues/125993).
-- **MCP missing**: run the install-MCP command and restart; verify `.cursor/mcp.json` points to the correct server command and `MESSENGER_DATA_DIR`.
+Contributor workflow, IPC contracts, and versioning live in [**AGENTS.md**](./AGENTS.md) and [**PROJECT.md**](./PROJECT.md).
 
 ## License
 
-Distributed under [**AGPL-3.0-only**](./LICENSE).
-
-## Links
-
-- **Repository**: [github.com/911218sky/mcp-cursor-message](https://github.com/911218sky/mcp-cursor-message)
-- **Traditional Chinese**: [README.tw.md](./README.tw.md)
-- **Maintainers**: [Runtime flow (PROJECT.md)](./PROJECT.md) · [Agent guidelines (AGENTS.md)](./AGENTS.md)
+[**AGPL-3.0-only**](./LICENSE)
