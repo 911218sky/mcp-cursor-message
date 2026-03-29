@@ -30,7 +30,7 @@
 - **`mcp-config.ts` 與 `mcp-server/index.ts`**：`SERVER_KEY`／`MCP_DISPLAY_NAME`／`mcp.json` 鍵名必須一致。
 - **Webview**：UI 在 `src/webview/main.ts`；HTML 模板與 CSP／nonce 在擴充載入邏輯中。新 DOM id 需與 TS 中的選取器同步。
 - **佇列與 XSS**：側欄輸出視為不可信資料，維持既有的跳脫／安全插入模式。
-- **授權**：本專案為 **AGPL-3.0-only**；勿引入與其不相容之依賴而不標註。
+- **授權**：本專案為 **AGPL-3.0**；勿引入與其不相容之依賴而不標註。
 
 ## 透過本專案 MCP 與使用者協作時
 

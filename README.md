@@ -47,4 +47,4 @@ Contributor workflow, IPC contracts, and versioning live in [**AGENTS.md**](./AG
 
 ## License
 
-[**AGPL-3.0-only**](./LICENSE)
+[**AGPL-3.0**](./LICENSE)
