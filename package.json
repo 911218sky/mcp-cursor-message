@@ -2,7 +2,7 @@
 	"name": "mcp-cursor-message",
 	"displayName": "mcp-cursor-message",
 	"description": "MCP side-channel chat: sidebar queue, check_messages / ask_question; Cursor integration.",
-	"version": "9.3.0",
+	"version": "9.3.1",
 	"author": "911218sky",
 	"publisher": "local",
 	"repository": {
@@ -14,8 +14,12 @@
 	"engines": {
 		"vscode": "^1.105.0"
 	},
-	"categories": ["Other"],
-	"activationEvents": ["onStartupFinished"],
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
 	"main": "./dist/extension.js",
 	"contributes": {
 		"viewsContainers": {
@@ -51,7 +55,11 @@
 			"properties": {
 				"mcpMessenger.uiLanguage": {
 					"type": "string",
-					"enum": ["en", "zh", "auto"],
+					"enum": [
+						"en",
+						"zh",
+						"auto"
+					],
 					"default": "en",
 					"description": "Sidebar Webview UI language. Default English; auto follows the editor display language."
 				}
