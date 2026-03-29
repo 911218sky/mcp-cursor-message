@@ -1,11 +1,17 @@
 // @ts-check
 import * as esbuild from "esbuild";
 
+const minifyShared = {
+	minify: true,
+	legalComments: /** @type {"none"} */ ("none"),
+	define: { "process.env.NODE_ENV": '"production"' },
+};
+
 /** @type {esbuild.BuildOptions} */
 const mcp = {
 	entryPoints: ["mcp-server/index.ts"],
 	bundle: true,
-	minify: true,
+	...minifyShared,
 	outfile: "dist/mcp-server.mjs",
 	format: "esm",
 	platform: "node",
@@ -15,6 +21,7 @@ const mcp = {
 const extension = {
 	entryPoints: ["src/extension.ts"],
 	bundle: true,
+	...minifyShared,
 	platform: "node",
 	target: "es2022",
 	outfile: "dist/extension.js",
@@ -26,6 +33,7 @@ const extension = {
 const webview = {
 	entryPoints: ["src/webview/main.ts"],
 	bundle: true,
+	...minifyShared,
 	platform: "browser",
 	target: "es2020",
 	outfile: "dist/webview.js",

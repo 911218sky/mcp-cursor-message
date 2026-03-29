@@ -353,6 +353,7 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 					case "ready":
 						await pushStateToPanel();
 						break;
+					// 設定側欄語言
 					case "setUiLanguage": {
 						const v = String(msg.value ?? "");
 						if (v === "en" || v === "zh" || v === "auto") {
@@ -366,6 +367,7 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 						}
 						break;
 					}
+					// 送出文字
 					case "sendText": {
 						const text = String(msg.text ?? "").trim();
 						if (text) {
