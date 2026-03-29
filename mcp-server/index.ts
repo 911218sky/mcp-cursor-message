@@ -33,10 +33,10 @@ const MAX_SERVER_LOG_BYTES = 1024 * 1024;
 
 /**
  * 輪詢 queue / answer 的間隔（毫秒）。
- * 預設 500ms 以降低讀檔頻率；可設 `MESSENGER_POLL_INTERVAL_MS` 覆寫。
+ * 預設 100ms 以降低讀檔頻率；可設 `MESSENGER_POLL_INTERVAL_MS` 覆寫。
  */
 const POLL_INTERVAL =
-	Number(process.env.MESSENGER_POLL_INTERVAL_MS) || 500;
+	Number(process.env.MESSENGER_POLL_INTERVAL_MS) || 100;
 
 /** 長等待時發送進度／日誌心跳的間隔；預設 1 分鐘。 */
 const HEARTBEAT_INTERVAL =
@@ -52,7 +52,7 @@ const MCP_DISPLAY_NAME = "mcp-cursor-message";
  * 加在送給 AI 的最後一段文字後，提醒模型回合未結束、需再呼叫 check_messages。
  */
 const SYSTEM_SUFFIX =
-	`\n\n---\n[system] 以上是使用者透過外掛傳送的對話內容。回覆完成後請呼叫 MCP 伺服器「${MCP_DISPLAY_NAME}」的 check_messages 工具繼續監聽新訊息。`;
+	`\n\n---\n[system] 以上是使用者透過外掛傳送的對話內容。你對使用者送出本輪回覆後，最後一個動作必須呼叫 MCP 伺服器「${MCP_DISPLAY_NAME}」的 check_messages 工具繼續監聽。你可先完成必要工作並呼叫其他工具，但結束本輪前務必呼叫 check_messages。`;
 
 const MCP_SERVER_INFO = {
 	name: MCP_DISPLAY_NAME,
@@ -344,12 +344,12 @@ function registerCheckMessages(server: McpServer): void {
 		"check_messages",
 		{
 			description:
-				"檢查並回傳待處理的使用者訊息。每輪回覆完成後必須呼叫此工具。可透過 reply 參數將本輪摘要推送到外掛介面。",
+				"檢查並回傳待處理的使用者訊息。每輪回覆完成後，結束本輪前必須呼叫此工具。可透過 reply 參數將本輪完整回覆推送到外掛介面。",
 			inputSchema: {
 				reply: z
 					.string()
 					.optional()
-					.describe("本輪回覆摘要（支援 Markdown），將推送到外掛介面展示給使用者"),
+					.describe("本輪完整回覆內容（支援 Markdown），將推送到外掛介面展示給使用者"),
 			},
 		},
 		async ({ reply }, extra) => {
@@ -407,7 +407,7 @@ function registerCheckMessages(server: McpServer): void {
 						content: [
 							{
 								type: "text",
-								text: "[system] 暫無新訊息。請勿向使用者輸出此提示，立即再次呼叫 check_messages 繼續監聽。",
+								text: "[system] 暫無新訊息。請勿向使用者輸出此提示；若本輪仍要繼續，結束本輪前請再次呼叫 check_messages 繼續監聽。",
 							},
 						],
 					};
@@ -429,7 +429,7 @@ function registerCheckMessages(server: McpServer): void {
 				content: [
 					{
 						type: "text",
-						text: "[system] check_messages 等待被客戶端中斷。若工作階段仍需繼續，請勿向使用者輸出這條內部提示，直接再次呼叫 check_messages。",
+						text: "[system] check_messages 等待被客戶端中斷。若工作階段仍需繼續，請勿向使用者輸出這條內部提示；結束本輪前請再次呼叫 check_messages。",
 					},
 				],
 				isError: true,

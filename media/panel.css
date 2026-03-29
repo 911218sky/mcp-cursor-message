@@ -4,9 +4,9 @@
 	--mcp-accent-fg: var(--vscode-button-foreground, #fff);
 	--mcp-accent-hi: var(--vscode-textLink-foreground, #3794ff);
 	--mcp-radius-sm: 8px;
-	--mcp-radius: 12px;
-	--mcp-radius-lg: 16px;
-	--mcp-radius-xl: 22px;
+	--mcp-radius: 10px;
+	--mcp-radius-lg: 14px;
+	--mcp-radius-xl: 18px;
 	--mcp-border: var(--vscode-widget-border, rgba(120, 130, 160, 0.22));
 	--mcp-border-soft: color-mix(in srgb, var(--mcp-border) 55%, transparent);
 	--mcp-surface-0: var(--vscode-sideBar-background, var(--vscode-editor-background));
@@ -22,8 +22,8 @@
 	);
 	--mcp-surface-elevated: color-mix(in srgb, var(--mcp-surface-1) 92%, #fff 8%);
 	--mcp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.08);
-	--mcp-shadow-md: 0 6px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
-	--mcp-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.16), 0 4px 16px rgba(0, 0, 0, 0.08);
+	--mcp-shadow-md: 0 4px 18px rgba(0, 0, 0, 0.1), 0 2px 7px rgba(0, 0, 0, 0.05);
+	--mcp-shadow-lg: 0 10px 28px rgba(0, 0, 0, 0.14), 0 3px 12px rgba(0, 0, 0, 0.07);
 	--mcp-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 	--mcp-ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
 	--mcp-font-ui: var(
@@ -129,8 +129,8 @@ body.app {
 	flex-direction: row;
 	align-items: flex-start;
 	justify-content: space-between;
-	gap: 12px;
-	padding: 16px 16px 14px;
+	gap: 10px;
+	padding: 12px 13px 11px;
 	position: relative;
 	z-index: 1;
 }
@@ -225,7 +225,7 @@ body.app {
 .topbar-titles {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: 4px;
 	min-width: 0;
 	flex: 1;
 	padding-top: 1px;
@@ -239,7 +239,7 @@ body.app {
 }
 
 .topbar-title {
-	font-size: 16px;
+	font-size: 15px;
 	font-weight: 620;
 	letter-spacing: -0.04em;
 	color: var(--vscode-sideBarTitle-foreground, inherit);
@@ -272,7 +272,7 @@ body.app {
 
 .topbar-sub {
 	margin: 0;
-	font-size: 11px;
+	font-size: 10.5px;
 	line-height: 1.5;
 	color: var(--vscode-descriptionForeground, rgba(200, 200, 200, 0.72));
 	word-break: break-word;
@@ -295,10 +295,10 @@ body.app {
 	min-height: 0;
 	overflow-y: auto;
 	overflow-x: hidden;
-	padding: 16px 14px 18px;
+	padding: 12px 11px 14px;
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
+	gap: 12px;
 	/* 隱藏捲動條外觀，仍可用滾輪／觸控捲動（節省橫向空間、較簡潔） */
 	scrollbar-width: none;
 	-ms-overflow-style: none;
@@ -380,7 +380,7 @@ body.app {
 .main-tab-panel {
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
+	gap: 10px;
 	min-width: 0;
 }
 
@@ -393,7 +393,7 @@ body.app {
 	position: relative;
 	border: 1px solid color-mix(in srgb, var(--mcp-border) 45%, transparent);
 	border-radius: var(--mcp-radius-lg);
-	padding: 16px 16px 16px;
+	padding: 12px 12px 12px;
 	background: color-mix(in srgb, var(--mcp-surface-2) 78%, var(--mcp-surface-0) 22%);
 	box-shadow: var(--mcp-shadow-sm);
 }
@@ -416,14 +416,14 @@ body.app {
 .card-head {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	margin-bottom: 12px;
+	gap: 8px;
+	margin-bottom: 9px;
 }
 
 .card-icon {
-	width: 26px;
-	height: 26px;
-	border-radius: 9px;
+	width: 22px;
+	height: 22px;
+	border-radius: 8px;
 	flex-shrink: 0;
 	background: color-mix(in srgb, var(--mcp-accent-hi) 18%, transparent);
 	border: 1px solid color-mix(in srgb, var(--mcp-accent-hi) 28%, transparent);
@@ -518,7 +518,7 @@ body.app {
 }
 
 .card-title {
-	font-size: 10px;
+	font-size: 9.5px;
 	font-weight: 700;
 	color: var(--vscode-descriptionForeground, #aaa);
 	text-transform: uppercase;
@@ -548,12 +548,12 @@ body.app {
 	line-height: 1.68;
 	max-height: min(480px, 65vh);
 	overflow-y: auto;
-	padding: 14px 14px;
+	padding: 12px 12px;
 	border-radius: var(--mcp-radius);
 	background: color-mix(in srgb, var(--vscode-textBlockQuote-background, rgba(80, 80, 80, 0.12)) 100%, transparent);
 	border: 1px solid color-mix(in srgb, var(--mcp-border) 50%, transparent);
 	color: var(--vscode-foreground);
-	margin-bottom: 14px;
+	margin-bottom: 10px;
 	scrollbar-width: none;
 	-ms-overflow-style: none;
 }
@@ -660,8 +660,8 @@ body.app {
 .queue-preview .qp {
 	display: flex;
 	align-items: flex-start;
-	gap: 11px;
-	padding: 10px 12px;
+	gap: 9px;
+	padding: 9px 10px;
 	margin-bottom: 8px;
 	border-radius: var(--mcp-radius);
 	background: color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.05)) 100%, transparent);
@@ -731,7 +731,7 @@ body.app {
 
 .queue-preview .muted {
 	margin: 0;
-	padding: 22px 14px;
+	padding: 16px 12px;
 	font-style: normal;
 	text-align: center;
 	color: var(--vscode-descriptionForeground, #888);
@@ -745,7 +745,7 @@ body.app {
 /* —— 底部輸入 —— */
 .composer {
 	flex-shrink: 0;
-	padding: 0 12px 16px;
+	padding: 0 10px 12px;
 	background: linear-gradient(
 		180deg,
 		transparent 0%,
@@ -755,7 +755,7 @@ body.app {
 }
 
 .composer-panel {
-	padding: 16px 16px 15px;
+	padding: 12px 12px 11px;
 	border-radius: var(--mcp-radius-xl);
 	border: 1px solid color-mix(in srgb, var(--mcp-border) 55%, transparent);
 	background: color-mix(in srgb, var(--mcp-surface-1) 94%, transparent);
@@ -792,12 +792,12 @@ body.app {
 	align-items: baseline;
 	justify-content: space-between;
 	gap: 10px;
-	margin-bottom: 10px;
+	margin-bottom: 8px;
 	flex-wrap: wrap;
 }
 
 .composer-label-text {
-	font-size: 11px;
+	font-size: 10px;
 	font-weight: 700;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
@@ -805,7 +805,7 @@ body.app {
 }
 
 .composer-kbd-hint {
-	font-size: 10px;
+	font-size: 9.5px;
 	font-weight: 500;
 	color: var(--vscode-descriptionForeground, #888);
 	letter-spacing: 0.01em;
@@ -830,7 +830,7 @@ body.app {
 }
 
 .composer-paste-strip {
-	padding: 0 12px 12px;
+	padding: 0 10px 10px;
 }
 
 .composer-paste-strip.hidden {
@@ -888,8 +888,8 @@ body.app {
 .composer-attach {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 8px;
-	margin-top: 10px;
+	gap: 7px;
+	margin-top: 8px;
 }
 
 .btn-attach {
@@ -897,8 +897,8 @@ body.app {
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	padding: 7px 14px;
-	font-size: 12px;
+	padding: 6px 11px;
+	font-size: 11px;
 	font-weight: 600;
 	border-radius: var(--mcp-radius);
 	border: 1px solid var(--mcp-border-soft);
@@ -928,13 +928,13 @@ body.app {
 
 .compose-input {
 	width: 100%;
-	padding: 12px 14px;
+	padding: 10px 11px;
 	border: none;
 	border-radius: inherit;
 	background: transparent;
 	color: var(--vscode-input-foreground, inherit);
 	resize: vertical;
-	min-height: 72px;
+	min-height: 68px;
 	max-height: 180px;
 	font-family: inherit;
 	font-size: 13px;
@@ -954,11 +954,11 @@ body.app {
 	align-items: center;
 	justify-content: space-between;
 	gap: 10px;
-	margin-top: 12px;
+	margin-top: 9px;
 }
 
 .hint {
-	font-size: 10px;
+	font-size: 9px;
 	color: var(--vscode-descriptionForeground, #777);
 	user-select: none;
 	opacity: 0.88;
@@ -967,10 +967,10 @@ body.app {
 
 /* —— 按鈕 —— */
 .btn {
-	padding: 8px 16px;
+	padding: 7px 13px;
 	border: none;
 	border-radius: var(--mcp-radius);
-	font-size: 12px;
+	font-size: 11px;
 	font-weight: 620;
 	cursor: pointer;
 	font-family: inherit;

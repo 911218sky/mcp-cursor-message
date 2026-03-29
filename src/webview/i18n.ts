@@ -46,12 +46,11 @@ export type UiStrings = {
 export const UI: Record<UiLocale, UiStrings> = {
 	zh: {
 		topbarTitle: "MCP 對話",
-		topbarSubHtml:
-			"佇列送入 Cursor · 模型以 <code>check_messages</code> 拉取",
+		topbarSubHtml: "使用 <code>check_messages</code> 收訊",
 		tabMain: "內容",
 		tabToken: "Token",
 		questionCardTitle: "需要你的選擇",
-		replyCardTitle: "AI 回覆摘要",
+		replyCardTitle: "AI 回覆",
 		replyAck: "已閱",
 		queueTitle: "待送佇列",
 		queueEmpty: "佇列為空",
@@ -78,7 +77,7 @@ export const UI: Record<UiLocale, UiStrings> = {
 		removeQueueAria: "撤銷佇列訊息",
 		previewImage: "[圖片]",
 		previewFilePrefix: "[檔案]",
-		langLabel: "介面語言",
+		langLabel: "語言",
 		langOptEn: "English",
 		langOptZh: "繁體中文",
 		langOptAuto: "自動（編輯器）",
@@ -86,12 +85,11 @@ export const UI: Record<UiLocale, UiStrings> = {
 	},
 	en: {
 		topbarTitle: "MCP chat",
-		topbarSubHtml:
-			"Queue into Cursor · model pulls with <code>check_messages</code>",
+		topbarSubHtml: "Pull via <code>check_messages</code>",
 		tabMain: "Content",
 		tabToken: "Token",
 		questionCardTitle: "Your choice needed",
-		replyCardTitle: "AI reply summary",
+		replyCardTitle: "AI reply",
 		replyAck: "Dismiss",
 		queueTitle: "Outbound queue",
 		queueEmpty: "Queue is empty",
@@ -118,7 +116,7 @@ export const UI: Record<UiLocale, UiStrings> = {
 		removeQueueAria: "Remove queued message",
 		previewImage: "[Image]",
 		previewFilePrefix: "[File]",
-		langLabel: "Language",
+		langLabel: "Lang",
 		langOptEn: "English",
 		langOptZh: "繁體中文",
 		langOptAuto: "Auto (editor)",
