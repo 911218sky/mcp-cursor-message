@@ -49,11 +49,11 @@ const MAX_WAIT_MS = Number(process.env.MESSENGER_MAX_WAIT_MS) || 3_600_000;
 const MCP_DISPLAY_NAME = "mcp-cursor-message";
 
 /**
- * 加在送給 AI 的最後一段文字後，用來確保模型在本輪結束前，
- * 最後一步仍會再次呼叫 `check_messages` 以取得下一則佇列訊息。
+ * 加在送給 AI 的最後一段文字後，用來確保模型在本輪「所有該做的工作都完成後」，
+ * 才會在結束前以最後一步再次呼叫 `check_messages` 取得下一則佇列訊息。
  */
 const SYSTEM_SUFFIX =
-	`\n\n---\n[system] 以上內容來自側欄佇列；你的本輪還沒結束。\n在你準備停止回覆、並結束本輪（也就是本輪最後要輸給使用者的內容）之前，必須在 MCP 伺服器「${MCP_DISPLAY_NAME}」上再次呼叫工具 check_messages 以取得下一則佇列訊息。\n你可以先完成必要工作並呼叫其他工具，但結束本輪前「最後一步」一定要呼叫 check_messages。\n你也可以呼叫 ask_question 或 send_progress 來詢問/更新進度；仍然需要在本輪結束前最後一步呼叫 check_messages。\n如果 check_messages 回傳的是「暫無新訊息 / 等待被中斷 / 請再次呼叫」等系統提示：不要把這段提示輸出給使用者，請在本輪內繼續再次呼叫 check_messages，直到拿到真正的下一則佇列訊息為止。`;
+	`\n\n---\n[system] 以上內容來自側欄佇列；你的本輪還沒結束。\n⚠️ 請先完整處理本輪從佇列取得的所有指令與工作（例如檔案修改、程式執行、測試或其他 MCP 工具呼叫），並把要回覆給使用者的內容寫完之後，再進行下一步。\n若你覺得當前需求不夠清楚、需要使用者選方案或補充資訊，請主動呼叫 MCP 伺服器的 ask_question 工具，讓側欄彈出選項問答後再繼續。\n若當前任務會分成多個步驟、需要較長時間完成，請在每個關鍵步驟完成後呼叫 send_progress 工具，把進度摘要（Markdown）推送到側欄，讓使用者知道目前進度與下一步計畫。\n在你「準備停止本輪回覆、也就是要輸出給使用者的最後內容之前」，必須在 MCP 伺服器「${MCP_DISPLAY_NAME}」上再次呼叫工具 check_messages 以取得下一則佇列訊息。\n請不要在本輪一開始就立即呼叫 check_messages；一定要先完成這一輪該做的事情，再在結束前以「最後一次工具呼叫」的方式執行 check_messages。\n你可以在中途先呼叫其他必要工具（例如編輯檔案、執行測試、ask_question 或 send_progress），但結束本輪前「最後一步」一定要呼叫 check_messages。\n如果 check_messages 回傳的是「暫無新訊息 / 等待被中斷 / 請再次呼叫」等系統提示：不要把這段提示輸出給使用者，請在本輪內繼續再次呼叫 check_messages，直到拿到真正的下一則佇列訊息為止。`;
 
 const MCP_SERVER_INFO = {
 	name: MCP_DISPLAY_NAME,
@@ -63,13 +63,16 @@ const MCP_SERVER_INFO = {
 // --- Zod（ask_question） --------------------------------------------------
 
 const questionOptionSchema = z.object({
-	id: z.string().describe("選項 ID"),
+	// `id` 在 UI 端用來做選項回傳對應；但模型未必會填，
+	// 因此這裡允許缺省，MCP 端會補上穩定且可預期的 ID。
+	id: z.string().optional().describe("選項 ID（可省略；MCP 端會自動補齊）"),
 	label: z.string().describe("選項顯示文字"),
 });
 
 const questionItemSchema = z.object({
 	question: z.string().describe("問題文字"),
-	options: z.array(questionOptionSchema).describe("選項列表"),
+	// 選項可省略；當 options 為空時，模型仍可用 `other` 文字讓使用者補充。
+	options: z.array(questionOptionSchema).optional().default([]).describe("選項列表"),
 	allow_multiple: z.boolean().default(false).describe("是否允許多選"),
 });
 
@@ -534,7 +537,11 @@ function registerAskQuestion(server: McpServer): void {
 			const questionItems = questions.map((q, i) => ({
 				id: "q" + i,
 				question: q.question,
-				options: q.options ?? [],
+				// 補齊 option.id，確保 UI 點選後回傳的 selected/other 能和本端對上。
+				options: (q.options ?? []).map((opt, j) => ({
+					id: opt.id ?? `o${i}_${j}`,
+					label: opt.label,
+				})),
 				allow_multiple: !!q.allow_multiple,
 			}));
 

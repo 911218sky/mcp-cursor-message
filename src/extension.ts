@@ -47,12 +47,16 @@ const PUSH_STATE_DEBOUNCE_MS = 100;
 const MUST_CALL_CHECK_MESSAGES_RULE_MDC = `---
 alwaysApply: true
 ---
-When the user is using the sidebar queue and the \`mcp-cursor-message\` MCP server is loaded:
+當使用者正在使用側邊欄佇列，且已載入 \`mcp-cursor-message\` MCP 伺服器時：
 
-- In every assistant reply, before you finish the message to the user, the final MCP tool call must be \`check_messages\` on the \`mcp-cursor-message\` MCP server.
-- If \`check_messages\` returns a system note like "no new messages / waiting interrupted / please call again": do not output that note to the user; keep calling \`check_messages\` again within the same reply flow until you receive an actual queued message (or the tool call is forcibly terminated).
-- If possible, pass the completed reply content via the tool's \`reply\` argument so the extension can display/push the next message.
-- You may call other MCP tools (e.g. \`ask_question\`, \`send_progress\`) first, but \`check_messages\` must remain the last MCP call before the assistant finishes the reply.
+- 在每一次助理回覆中，於結束對使用者的訊息之前，最後一個 MCP 工具呼叫必須是 \`mcp-cursor-message\` MCP 伺服器上的 \`check_messages\`。
+- 若 \`check_messages\` 回傳的系統訊息為「沒有新訊息 / 等待已被中斷 / 請再次呼叫」這類提示，請不要將該訊息輸出給使用者；而是要在同一次回覆流程中持續再次呼叫 \`check_messages\`，直到取得實際排隊中的訊息（或工具呼叫被強制終止）。
+- 如果可以，請透過工具的 \`reply\` 參數傳入已完成的回覆內容，以便擴充功能可以顯示／推送下一則訊息。
+- 你可以先呼叫其他 MCP 工具（例如 \`ask_question\`、\`send_progress\`），但在助理結束這次回覆之前，\`check_messages\` 仍然必須是最後一個 MCP 呼叫。
+- 當本輪任務會分成多個步驟（例如先分析、再實作、再驗證）時，建議在每個關鍵步驟完成後呼叫 \`send_progress\`，用簡短 Markdown 說明「已完成 / 目前狀態 / 下一步」。
+- 當你對使用者需求有多種合理解讀，或需要使用者在幾種策略之間做選擇時，請優先呼叫 \`ask_question\` 呈現 2–4 個具體選項，而不是自行假設。
+- 當遇到大型、含糊或有多種架構取捨的任務時，優先考慮切換到 Cursor 的「計畫模式（plan）」來先協助設計實作方案。
+- 需要切換到「計畫模式」時，先用一句話向使用者說明為何適合切換，並詢問是否要切換；只有在使用者同意後，才呼叫 \`SwitchMode\` 工具將模式切換為 \`plan\`。
 `;
 
 /** `panel.html` 原始模板（僅 nonce／URI 每輪替換），避免 `resolveWebviewView` 重入時重複讀檔。 */

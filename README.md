@@ -21,6 +21,20 @@ The project pairs a **sidebar extension** with an **MCP server**: both share a s
 
 After each reply when the sidebar queue is in use, call the **`check_messages`** tool on the **`mcp-cursor-message`** MCP server so the extension can deliver the next message.
 
+#### Suggested tool usage rules
+
+When using this MCP from an AI assistant or agent, we recommend the following default behavior:
+
+- **Use `send_progress` for multi-step work**:  
+  Whenever a task naturally breaks into two or more steps (for example: analyze → plan → implement → test), call `send_progress` after each key step with a short Markdown summary that includes:
+  - what you just finished,
+  - the current state and remaining work,
+  - what you plan to do next.
+- **Use `ask_question` instead of guessing**:  
+  When requirements are ambiguous or there are multiple reasonable strategies, prefer calling `ask_question` to present 2–4 concrete options (single or multi-select) and let the user choose, rather than silently picking one.
+
+These rules complement the `SYSTEM_SUFFIX` instructions returned by `check_messages` in `mcp-server/index.ts`. If you override behavior in workspace rules, keep them consistent with these defaults.
+
 ## Requirements
 
 - **Cursor** or **Visual Studio Code** (see `engines.vscode` in `package.json`)
