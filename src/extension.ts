@@ -49,10 +49,10 @@ alwaysApply: true
 ---
 When the user is using the sidebar queue and the \`mcp-cursor-message\` MCP server is loaded:
 
-- Every assistant reply to the user must end with a final tool call: \`check_messages\` on the \`mcp-cursor-message\` MCP server.
-- This \`check_messages\` call must happen as the last action before the assistant finishes the reply (do not skip it).
+- In every assistant reply, before you finish the message to the user, the final MCP tool call must be \`check_messages\` on the \`mcp-cursor-message\` MCP server.
+- If \`check_messages\` returns a system note like "no new messages / waiting interrupted / please call again": do not output that note to the user; keep calling \`check_messages\` again within the same reply flow until you receive an actual queued message (or the tool call is forcibly terminated).
 - If possible, pass the completed reply content via the tool's \`reply\` argument so the extension can display/push the next message.
-- The assistant may also call other MCP tools (e.g. \`ask_question\`, \`send_progress\`) as needed, but \`check_messages\` must remain the final call of each reply.
+- You may call other MCP tools (e.g. \`ask_question\`, \`send_progress\`) first, but \`check_messages\` must remain the last MCP call before the assistant finishes the reply.
 `;
 
 /** `panel.html` 原始模板（僅 nonce／URI 每輪替換），避免 `resolveWebviewView` 重入時重複讀檔。 */
