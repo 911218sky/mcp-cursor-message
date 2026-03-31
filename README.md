@@ -15,7 +15,7 @@ You are responsible for security and compliance. Output from this tool **does no
 
 ## What you get
 
-The project pairs a **sidebar extension** with an **MCP server**: both share a small on-disk message store so the model and the UI stay in sync. Typical uses include queued user input, multi-step Q&A with fixed options, and lightweight progress text shown next to the editor. The sidebar shows the queue, Q&A cards, and reply summaries. **Language** is configurable from the panel header or **`mcpMessenger.uiLanguage`** (search **MCP chat** in Settings) for **zh**, **auto**, or **en**. With a folder workspace, the data directory is **`<workspace>/.cursor/messenger-data`** and must match **`MESSENGER_DATA_DIR`** in your MCP config.
+The project pairs a **sidebar extension** with an **MCP server**: both share a small on-disk message store so the model and the UI stay in sync. Typical uses include queued user input, multi-step Q&A with fixed options, and lightweight progress text shown next to the editor. The sidebar shows the queue, Q&A cards, and reply summaries. **Language** is configurable from the panel header or **`mcpMessenger.uiLanguage`** (search **MCP chat** in Settings) for **zh**, **auto**, or **en**. With a folder workspace, the data directory is **`<workspace>/.cursor/messenger-data`** and must match **`MESSENGER_DATA_DIR`** in your MCP config. If the workspace directory is empty, the extension will automatically migrate any existing **globalStorage** `messenger-data` into the workspace directory on first open.
 
 ### For AI assistants (sidebar queue + MCP)
 

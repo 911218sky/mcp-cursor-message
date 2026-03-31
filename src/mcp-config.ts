@@ -36,7 +36,7 @@ export async function installMcpServer(
 	if (!doc.mcpServers) doc.mcpServers = {};
 
 	doc.mcpServers[SERVER_KEY] = {
-		command: "node",
+		command: process.execPath,
 		args: [mcpServerPath],
 		env: {
 			MESSENGER_DATA_DIR: messengerDataDir,

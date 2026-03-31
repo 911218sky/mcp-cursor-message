@@ -43,6 +43,17 @@ let debounceTimer: NodeJS.Timeout | undefined;
 /** `messenger-data/*.json` 變更後延遲推送側欄狀態（毫秒）。 */
 const PUSH_STATE_DEBOUNCE_MS = 100;
 
+/** 確保 workspace 內的規則檔存在：缺失時 AI 佇列串接可能無法接續。 */
+const MUST_CALL_CHECK_MESSAGES_RULE_MDC = `---
+alwaysApply: true
+---
+When the user is using the sidebar queue and the \`mcp-cursor-message\` MCP server is loaded:
+
+- Every assistant reply to the user must end with a final tool call: \`check_messages\` on the \`mcp-cursor-message\` MCP server.
+- This \`check_messages\` call must happen as the last action before the assistant finishes the reply (do not skip it).
+- If possible, pass the completed reply content via the tool's \`reply\` argument so the extension can display/push the next message.
+`;
+
 /** `panel.html` 原始模板（僅 nonce／URI 每輪替換），避免 `resolveWebviewView` 重入時重複讀檔。 */
 let cachedPanelHtmlTemplate: string | undefined;
 
@@ -84,11 +95,90 @@ function messengerDataDirForContext(context: vscode.ExtensionContext): string {
 	return path.join(context.globalStorageUri.fsPath, "messenger-data");
 }
 
+/**
+ * 若工作區沒有 `./.cursor/rules/must-call-check-messages.mdc`，則在啟用/切換工作區時自動補齊一份。
+ * 目的：避免使用者的環境缺失此規則後，側欄佇列串接行為中斷。
+ */
+async function ensureMustCallCheckMessagesRuleMdc(
+	context: vscode.ExtensionContext
+): Promise<void> {
+	const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (!wf) return;
+
+	// 規則檔固定放在：工作區 `.cursor/rules/must-call-check-messages.mdc`
+	const dest = path.join(wf, ".cursor", "rules", "must-call-check-messages.mdc");
+	try {
+		await fs.stat(dest);
+		return; // 已存在就不覆寫（避免干擾使用者自訂規則）
+	} catch {
+		// ignore
+	}
+
+	await fs.mkdir(path.dirname(dest), { recursive: true });
+	await fs.writeFile(dest, MUST_CALL_CHECK_MESSAGES_RULE_MDC, "utf-8");
+}
+
+/**
+ * 首次進入某工作區時，如果該工作區 `.cursor/messenger-data` 是空的，
+ * 但 `globalStorage` 下可能存在過往 `messenger-data`，則自動遷移一份過來（避免「找不到可複製過去內容」）。
+ *
+ * 注意：僅在「目標資料夾判定為空」時才會遷移，且不覆蓋已有內容。
+ */
+async function migrateGlobalMessengerDataToWorkspaceIfEmpty(
+	context: vscode.ExtensionContext,
+	workspaceDir: string
+): Promise<void> {
+	const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (!wf) return; // 沒有工作區，無需遷移
+
+	const targetDir = path.join(wf, ".cursor", "messenger-data");
+	// 若傳入 workspaceDir 與計算結果不一致（理論上不會發生），以計算值為準。
+	if (targetDir !== workspaceDir) return;
+
+	// 檢查資料夾是否「看起來有內容」：只看與側欄狀態直接相關的檔案與 paste/ 殘留。
+	const dirHasContent = async (dir: string): Promise<boolean> => {
+		const ipcFiles = [
+			"queue.json",
+			"question.json",
+			"answer.json",
+			"reply.json",
+			"history.json",
+		];
+		for (const f of ipcFiles) {
+			try {
+				const st = await fs.stat(path.join(dir, f));
+				if (typeof st.size === "number" && st.size > 0) return true;
+			} catch {
+				// 忽略不存在等狀況
+			}
+		}
+		const pasteDir = path.join(dir, "paste");
+		try {
+			const entries = await fs.readdir(pasteDir);
+			return entries.length > 0;
+		} catch {
+			return false;
+		}
+	};
+
+	// workspace 已有內容就不覆蓋。
+	if (await dirHasContent(targetDir)) return;
+
+	const globalDir = path.join(context.globalStorageUri.fsPath, "messenger-data");
+	if (!await dirHasContent(globalDir)) return;
+
+	// workspace 為空時才遷移：整包搬過去（包含 paste/）。
+	await fs.cp(globalDir, targetDir, { recursive: true });
+}
+
 /** 工作區切換時更新 `dataDir`、重建 watcher、重推 Webview 狀態。 */
-function rebindMessengerDataDir(context: vscode.ExtensionContext): void {
+async function rebindMessengerDataDir(context: vscode.ExtensionContext): Promise<void> {
 	const next = messengerDataDirForContext(context);
 	if (next === dataDir) return;
 	dataDir = next;
+	await ensureMustCallCheckMessagesRuleMdc(context);
+	// 若首次進入某工作區且其 messenger-data 為空，先嘗試搬移 globalStorage 的過往內容。
+	await migrateGlobalMessengerDataToWorkspaceIfEmpty(context, dataDir);
 	// 新路徑首次寫入前先建立目錄。
 	void ensureDataDir(dataDir);
 	// 舊路徑的 watcher 先釋放，避免監聽錯目錄。
@@ -116,10 +206,13 @@ function autoInstallMcpIfWorkspace(context: vscode.ExtensionContext): void {
 }
 
 /** 擴充啟用：註冊 Webview、命令、資料夾監聽與工作區變更。 */
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	extensionContext = context;
 	dataDir = messengerDataDirForContext(context);
-	void ensureDataDir(dataDir);
+	await ensureMustCallCheckMessagesRuleMdc(context);
+	// 首次打開工作區時：把 globalStorage 內的過往資料遷移到 workspace 目錄，避免「找不到可複製過去內容」。
+	await migrateGlobalMessengerDataToWorkspaceIfEmpty(context, dataDir);
+	await ensureDataDir(dataDir);
 
 	// `getDataDir` 用函式而非固定字串：切換工作區時只改模組變數 `dataDir`，provider 永遠讀到最新路徑。
 	const provider = new MessengerViewProvider(context.extensionUri, () => dataDir);
@@ -178,7 +271,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// 新增／移除／切換工作區資料夾時改 `dataDir`、重建 watcher、必要時靜默寫 MCP。
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeWorkspaceFolders(() => {
-			rebindMessengerDataDir(context);
+			void rebindMessengerDataDir(context);
 		})
 	);
 
