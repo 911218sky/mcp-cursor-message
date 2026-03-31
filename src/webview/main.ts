@@ -77,6 +77,9 @@ const selectedAnswers: Record<string, string[]> = {};
 let historyEntries: PanelHistoryEntry[] = [];
 /** 用於避免同一則 reply 在 state 重推時重複寫入歷史。 */
 let lastSeenReplyContent = "";
+/** 送出新一輪後，直到收到新的 AI 回覆前都維持 processing。 */
+let awaitingAssistantReply = false;
+let lastUserSendAt = 0;
 let isHistoryPanelCollapsed = false;
 let queueEditState: QueueEditState | null = null;
 
@@ -621,6 +624,7 @@ function renderTokenStats(ts: PanelTokenStats | undefined): void {
 }
 
 function deriveAiRunState(queue: unknown, replyContent: string): AiRunState {
+	if (awaitingAssistantReply) return "processing";
 	if (Array.isArray(queue) && queue.length > 0) return "processing";
 	if (replyContent.trim()) return "done";
 	const last = historyEntries[historyEntries.length - 1];
@@ -668,6 +672,17 @@ window.addEventListener("message", (ev) => {
 		const last = historyEntries[historyEntries.length - 1];
 		if (!last || last.role !== "assistant" || last.content !== incomingReply) {
 			appendHistory("assistant", incomingReply);
+		}
+	}
+	if (awaitingAssistantReply) {
+		const latestAssistantTs = [...historyEntries]
+			.reverse()
+			.find((row) => row.role === "assistant")?.ts;
+		if (
+			(incomingReply && incomingReply !== prevLastSeenReplyContent) ||
+			(typeof latestAssistantTs === "number" && latestAssistantTs > lastUserSendAt)
+		) {
+			awaitingAssistantReply = false;
 		}
 	}
 	lastSeenReplyContent = incomingReply;
@@ -779,6 +794,8 @@ function doSend(): void {
 	const text = msgInput.value.trim();
 	const tr = S();
 	if (pendingPastes.length === 0 && !text) return;
+	awaitingAssistantReply = true;
+	lastUserSendAt = Date.now();
 	if (pendingPastes.length > 0) {
 		const imageNote = tr.historyImageNote.replace(
 			"{count}",
@@ -803,6 +820,7 @@ function doSend(): void {
 	}
 	msgInput.value = "";
 	updateSend();
+	renderAiRunStatus(lastQueue, lastSeenReplyContent);
 }
 
 sendBtn.addEventListener("click", doSend);
