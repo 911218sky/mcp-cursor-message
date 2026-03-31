@@ -336,7 +336,7 @@ async function pushStateToPanel(): Promise<void> {
 		uiLocale: resolvePanelUiLocale(),
 		uiLanguageSetting: getUiLanguageSetting(),
 		question,
-		reply: reply ? { content: reply.content } : null,
+		reply: reply ? { content: reply.content, kind: reply.kind } : null,
 		queue,
 		history,
 		tokenStats,

@@ -108,13 +108,20 @@ export async function readQuestion(dataDir: string): Promise<unknown | null> {
 /** 讀取 `reply.json`（`check_messages` 的 `reply` 或 `send_progress` 的摘要）。 */
 export async function readReply(
 	dataDir: string
-): Promise<{ content: string; timestamp?: string } | null> {
+): Promise<
+	{ content: string; kind?: "progress" | "final"; timestamp?: string } | null
+> {
 	const { replyFile } = getIpcPaths(dataDir);
 	try {
 		const raw = await fs.readFile(replyFile, "utf-8");
-		const o = JSON.parse(raw) as { content?: string; timestamp?: string };
+		const o = JSON.parse(raw) as {
+			content?: string;
+			kind?: unknown;
+			timestamp?: string;
+		};
 		if (typeof o.content === "string") {
-			return { content: o.content, timestamp: o.timestamp };
+			const kind = o.kind === "progress" || o.kind === "final" ? o.kind : undefined;
+			return { content: o.content, kind, timestamp: o.timestamp };
 		}
 		return null;
 	} catch {

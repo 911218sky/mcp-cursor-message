@@ -623,18 +623,26 @@ function renderTokenStats(ts: PanelTokenStats | undefined): void {
 	tokenInline.textContent = t.tokenInline.replace("{total}", total).replace("{last}", last);
 }
 
-function deriveAiRunState(queue: unknown, replyContent: string): AiRunState {
+function deriveAiRunState(
+	queue: unknown,
+	replyContent: string,
+	replyKind?: "progress" | "final",
+): AiRunState {
 	if (awaitingAssistantReply) return "processing";
 	if (Array.isArray(queue) && queue.length > 0) return "processing";
-	if (replyContent.trim()) return "done";
+	if (replyContent.trim() && replyKind !== "progress") return "done";
 	const last = historyEntries[historyEntries.length - 1];
 	if (last?.role === "assistant") return "done";
 	return "idle";
 }
 
-function renderAiRunStatus(queue: unknown, replyContent: string): void {
+function renderAiRunStatus(
+	queue: unknown,
+	replyContent: string,
+	replyKind?: "progress" | "final",
+): void {
 	const t = S();
-	const state = deriveAiRunState(queue, replyContent);
+	const state = deriveAiRunState(queue, replyContent, replyKind);
 	aiRunStatus.classList.remove("is-processing", "is-done");
 	if (state === "processing") {
 		aiRunStatus.classList.add("is-processing");
@@ -668,9 +676,13 @@ window.addEventListener("message", (ev) => {
 	applyChrome(m.uiLocale);
 	renderQuestion((m.question as QuestionPayload | null) ?? null);
 	const incomingReply = (m.reply?.content ?? "").trim();
+	const incomingReplyKind = m.reply?.kind;
 	if (incomingReply && incomingReply !== prevLastSeenReplyContent) {
 		const last = historyEntries[historyEntries.length - 1];
-		if (!last || last.role !== "assistant" || last.content !== incomingReply) {
+		if (
+			incomingReplyKind !== "progress" &&
+			(!last || last.role !== "assistant" || last.content !== incomingReply)
+		) {
 			appendHistory("assistant", incomingReply);
 		}
 	}
@@ -679,7 +691,11 @@ window.addEventListener("message", (ev) => {
 			.reverse()
 			.find((row) => row.role === "assistant")?.ts;
 		if (
-			(incomingReply && incomingReply !== prevLastSeenReplyContent) ||
+			(
+				incomingReply &&
+				incomingReply !== prevLastSeenReplyContent &&
+				incomingReplyKind !== "progress"
+			) ||
 			(typeof latestAssistantTs === "number" && latestAssistantTs > lastUserSendAt)
 		) {
 			awaitingAssistantReply = false;
@@ -687,7 +703,7 @@ window.addEventListener("message", (ev) => {
 	}
 	lastSeenReplyContent = incomingReply;
 	renderQueuePreview(m.queue);
-	renderAiRunStatus(m.queue, incomingReply);
+	renderAiRunStatus(m.queue, incomingReply, incomingReplyKind);
 	renderTokenStats(m.tokenStats);
 	renderHistory();
 });

@@ -61,7 +61,7 @@ export type ExtensionPanelStateMessage = {
 	uiLocale: "en" | "zh";
 	uiLanguageSetting: PanelUiLanguageSetting;
 	question: unknown;
-	reply: { content?: string } | null;
+	reply: { content?: string; kind?: "progress" | "final" } | null;
 	queue: unknown;
 	/** 與 `dataDir` 內 `history.json` 同步。 */
 	history: PanelHistoryEntry[];

@@ -384,7 +384,11 @@ function registerCheckMessages(server: McpServer): void {
 				await fs.writeFile(
 					REPLY_FILE,
 					JSON.stringify(
-						{ content: reply, timestamp: new Date().toISOString() },
+						{
+							content: reply,
+							kind: "final",
+							timestamp: new Date().toISOString(),
+						},
 						null,
 						2
 					),
@@ -491,7 +495,11 @@ function registerSendProgress(server: McpServer): void {
 			await fs.writeFile(
 				REPLY_FILE,
 				JSON.stringify(
-					{ content: progress, timestamp: new Date().toISOString() },
+					{
+						content: progress,
+						kind: "progress",
+						timestamp: new Date().toISOString(),
+					},
 					null,
 					2
 				),
