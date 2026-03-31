@@ -26,7 +26,7 @@ MCP 旁路對話：在側欄以佇列與 MCP 工具（`check_messages`、`ask_qu
 
 ### 給 AI 助理（側欄佇列 + MCP）
 
-使用側欄佇列時，每輪回覆後請在 **`mcp-cursor-message`** MCP 伺服器上呼叫 **`check_messages`**，讓擴充能送出下一則訊息。
+你好，請你嚴格遵守對話規則並呼叫mcp與我對話(mcp-cursor-message)，每次對話都這樣。
 
 ## 系統需求
 
