@@ -240,6 +240,22 @@ function historyPreviewPlain(text: string, maxChars: number): string {
 	return `${t.slice(0, maxChars).trimEnd()}…`;
 }
 
+/** 以「幾個關鍵字串」組合簽章，判斷 history 是否真的變動。 */
+function historyRenderSignature(entries: PanelHistoryEntry[]): string {
+	const len = entries.length;
+	if (len === 0) return "0";
+	const last = entries[len - 1];
+	const lastSnip =
+		last.content.length > 80 ? `${last.content.slice(0, 80)}…` : last.content;
+	const prev = len >= 2 ? entries[len - 2] : null;
+	const prevSnip = prev
+		? prev.content.length > 60
+			? `${prev.content.slice(0, 60)}…`
+			: prev.content
+		: "";
+	return `${len}|${last.role}|${last.ts}|${lastSnip}|${prev?.role ?? ""}|${prev?.ts ?? ""}|${prevSnip}`;
+}
+
 /** 隱藏問答卡並清除當前題目狀態。 */
 function hideQuestionCard(): void {
 	questionCard.classList.add("hidden");
@@ -439,7 +455,9 @@ function renderHistory(): void {
 				item.content.split(/\r?\n/).filter((line) => line.trim().length > 0).length >
 				HISTORY_COLLAPSE_MIN_LINES;
 			const isLatest = i === historyEntries.length - 1;
-			const shouldCollapse = (longByChars || longByLines) && !isLatest;
+			// 性能：大量 history 時，非最新 assistant 不急著做 markdown 解析；改為預設折疊（lazy）。
+			const shouldCollapse =
+				item.role === "assistant" ? !isLatest : (longByChars || longByLines) && !isLatest;
 			const previewPlain = historyPreviewPlain(
 				item.content,
 				LAZY_PREVIEW_MAX_CHARS,
@@ -665,8 +683,13 @@ window.addEventListener("message", (ev) => {
 	const raw = ev.data as { type?: string };
 	if (raw.type !== "state") return;
 	const m = raw as ExtensionPanelStateMessage;
+		const prevHistorySig = historyRenderSignature(historyEntries);
 	const prevLastSeenReplyContent = lastSeenReplyContent;
-	historyEntries = normalizeHistoryPayload(m.history ?? []);
+		const nextHistoryEntries = normalizeHistoryPayload(m.history ?? []);
+		const nextHistorySig = historyRenderSignature(nextHistoryEntries);
+		const historyChanged = prevHistorySig !== nextHistorySig;
+		let historyRenderedDuringMessage = false;
+		historyEntries = nextHistoryEntries;
 	if (historyEntries.length === 0) {
 		tryMigrateHistoryFromLocalStorage();
 	}
@@ -684,6 +707,7 @@ window.addEventListener("message", (ev) => {
 			(!last || last.role !== "assistant" || last.content !== incomingReply)
 		) {
 			appendHistory("assistant", incomingReply);
+			historyRenderedDuringMessage = true;
 		}
 	}
 	if (awaitingAssistantReply) {
@@ -705,7 +729,9 @@ window.addEventListener("message", (ev) => {
 	renderQueuePreview(m.queue);
 	renderAiRunStatus(m.queue, incomingReply, incomingReplyKind);
 	renderTokenStats(m.tokenStats);
-	renderHistory();
+		if (historyChanged && !historyRenderedDuringMessage) {
+			renderHistory();
+		}
 });
 
 // 允許點擊問答遮罩背景與 `Esc` 也能取消（不會造成 XSS，僅觸發既有 cancelQ）。
