@@ -19,7 +19,7 @@ The project pairs a **sidebar extension** with an **MCP server**: both share a s
 
 ### For AI assistants (sidebar queue + MCP)
 
-After each reply when the sidebar queue is in use, call the **`check_messages`** tool on the **`mcp-cursor-message`** MCP server so the extension can deliver the next message.
+Hello, please strictly follow the conversation rules and use MCP to talk with me (`mcp-cursor-message`) every time. From now on, for all MCP-related questions, use MCP to interact with the user on every turn, and always invoke MCP after you send your reply.
 
 #### Suggested tool usage rules
 

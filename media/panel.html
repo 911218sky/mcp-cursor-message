@@ -42,39 +42,11 @@
 					</p>
 				</div>
 			</div>
-			<div class="topbar-controls">
-				<button id="btnOpenSettings" class="topbar-settings-btn" type="button">
-					<span id="chromeSettingsBtn">Settings</span>
-				</button>
-			</div>
 		</div>
 	</header>
 
 	<main class="scroll" id="mainScroll">
 		<div id="panelMain" class="main-tab-panel">
-		<div id="questionCard" class="card card--question hidden">
-			<div class="card-head">
-				<span class="card-icon card-icon--q" aria-hidden="true"></span>
-				<div class="card-title" id="chromeQuestionCardTitle">Your choice needed</div>
-			</div>
-			<div id="questionBody"></div>
-		</div>
-
-		<div id="replyCard" class="card card--reply hidden">
-			<div class="card-head">
-				<div class="card-head-main">
-					<span class="card-icon card-icon--reply" aria-hidden="true"></span>
-					<div class="card-title" id="chromeReplyTitle">AI reply summary</div>
-				</div>
-				<button id="btnToggleReplyPanel" class="history-panel-toggle" type="button">Hide reply</button>
-			</div>
-			<div id="replyContent" class="reply-content"></div>
-			<button id="btnToggleReply" class="reply-toggle hidden" type="button">Expand</button>
-			<button id="replyAck" class="btn btn-ghost btn-block" type="button">
-				Dismiss
-			</button>
-		</div>
-
 		<div class="card card--history">
 			<div class="card-head">
 				<div class="card-head-main">
@@ -98,7 +70,6 @@
 		</div>
 		</div>
 	</main>
-
 	<footer class="composer" aria-label="Composer">
 		<div class="composer-panel">
 			<label class="composer-label" for="msgInput">
@@ -107,6 +78,7 @@
 					>Enter to send · Shift+Enter newline · paste images from clipboard</span
 				>
 			</label>
+			<div id="aiRunStatus" class="ai-run-status" role="status" aria-live="polite"></div>
 			<div class="composer-field">
 				<textarea
 					id="msgInput"
@@ -157,6 +129,9 @@
 						<polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
 					</svg>
 					<span id="chromeBtnFileLabel">File</span>
+				</button>
+				<button type="button" id="btnOpenSettings" class="btn btn-attach">
+					<span id="chromeSettingsBtn">Settings</span>
 				</button>
 			</div>
 			<div class="composer-row">
@@ -210,6 +185,15 @@
 					<option value="auto">Auto</option>
 				</select>
 			</div>
+		</div>
+	</div>
+	<div id="questionCard" class="settings-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="chromeQuestionCardTitle">
+		<div class="settings-card question-dialog-card">
+			<div class="card-head">
+				<span class="card-icon card-icon--q" aria-hidden="true"></span>
+				<div class="card-title" id="chromeQuestionCardTitle">Your choice needed</div>
+			</div>
+			<div id="questionBody"></div>
 		</div>
 	</div>
 

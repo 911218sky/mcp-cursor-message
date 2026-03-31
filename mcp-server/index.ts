@@ -201,11 +201,16 @@ const TEXT_EXTS = new Set([
 	".svelte",
 ]);
 
+/** 送進模型前明確標示「這段來自使用者命令」。 */
+function userCommandText(text: string): string {
+	return `[user_command]\n${text}`;
+}
+
 /** 純文字佇列項轉為模型 content。 */
 async function processTextMessage(
 	msg: Extract<QueueMsg, { type: "text" }>
 ): Promise<ContentPart> {
-	return { type: "text", text: msg.content ?? "" };
+	return { type: "text", text: userCommandText(msg.content ?? "") };
 }
 
 /** 讀取圖片檔為 base64，可選前置說明文字。 */
@@ -223,7 +228,7 @@ async function processImageMessage(
 		const base64 = buf.toString("base64");
 		const result: ContentPart[] = [];
 		if (msg.caption) {
-			result.push({ type: "text", text: msg.caption });
+			result.push({ type: "text", text: userCommandText(msg.caption) });
 		}
 		result.push({ type: "image", data: base64, mimeType: mime });
 		return result.length === 1 ? result[0]! : result;
@@ -243,7 +248,9 @@ async function processFileMessage(
 	try {
 		const stat = await fs.stat(filePath);
 		const ext = path.extname(filePath).toLowerCase();
-		let text = `[檔案: ${path.basename(filePath)}] (${formatSize(stat.size)})\n路徑: ${filePath}\n`;
+		let text = userCommandText(
+			`[檔案: ${path.basename(filePath)}] (${formatSize(stat.size)})\n路徑: ${filePath}\n`
+		);
 		if (TEXT_EXTS.has(ext) && stat.size < 512 * 1024) {
 			const content = await fs.readFile(filePath, "utf-8");
 			text += "```\n" + content + "\n```";

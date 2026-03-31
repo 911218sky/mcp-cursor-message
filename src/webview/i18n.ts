@@ -37,6 +37,9 @@ export type UiStrings = {
 	tokenInlineOnly: string;
 	composerLabel: string;
 	composerHint: string;
+	aiStatusIdle: string;
+	aiStatusProcessing: string;
+	aiStatusDone: string;
 	btnImage: string;
 	btnFile: string;
 	composerAttachHint: string;
@@ -46,8 +49,16 @@ export type UiStrings = {
 	qCancel: string;
 	qSubmit: string;
 	removeQueue: string;
+	editQueue: string;
+	editQueueTitle: string;
+	editQueueSave: string;
+	editQueueCancel: string;
 	removeQueueTitle: string;
 	removeQueueAria: string;
+	copyHistory: string;
+	copyHistoryDone: string;
+	deleteHistory: string;
+	deleteHistoryAria: string;
 	previewImage: string;
 	previewFilePrefix: string;
 	/** 頂欄語言選單 */
@@ -105,6 +116,9 @@ export const UI: Record<UiLocale, UiStrings> = {
 		composerLabel: "傳給 AI",
 		composerHint:
 			"Enter 送出 · Shift+Enter 換行 · 貼圖會先暫存，按「送出」才送出",
+		aiStatusIdle: "AI 狀態：待命",
+		aiStatusProcessing: "AI 狀態：處理中",
+		aiStatusDone: "AI 狀態：已完成",
 		btnImage: "圖片",
 		btnFile: "檔案",
 		composerAttachHint: "選擇器加入附件 · Ctrl+V 貼圖暫存於輸入區",
@@ -114,9 +128,17 @@ export const UI: Record<UiLocale, UiStrings> = {
 		qCancel: "取消",
 		qSubmit: "提交回答",
 		removeQueue: "撤銷",
+		editQueue: "編輯",
+		editQueueTitle: "編輯此則待送內容",
+		editQueueSave: "儲存",
+		editQueueCancel: "取消",
 		removeQueueTitle:
 			"自佇列移除此則（尚未被 check_messages 取出前）",
 		removeQueueAria: "撤銷佇列訊息",
+		copyHistory: "複製",
+		copyHistoryDone: "已複製",
+		deleteHistory: "刪除",
+		deleteHistoryAria: "刪除此則歷史訊息",
 		previewImage: "[圖片]",
 		previewFilePrefix: "[檔案]",
 		langLabel: "語言",
@@ -170,6 +192,9 @@ export const UI: Record<UiLocale, UiStrings> = {
 		composerLabel: "To AI",
 		composerHint:
 			"Enter to send · Shift+Enter newline · pasted images stay until you press Send",
+		aiStatusIdle: "AI status: idle",
+		aiStatusProcessing: "AI status: working",
+		aiStatusDone: "AI status: done",
 		btnImage: "Image",
 		btnFile: "File",
 		composerAttachHint: "Pick attachments · Ctrl+V in box stages pasted image",
@@ -179,9 +204,17 @@ export const UI: Record<UiLocale, UiStrings> = {
 		qCancel: "Cancel",
 		qSubmit: "Submit",
 		removeQueue: "Remove",
+		editQueue: "Edit",
+		editQueueTitle: "Edit queued content",
+		editQueueSave: "Save",
+		editQueueCancel: "Cancel",
 		removeQueueTitle:
 			"Remove from queue (only before check_messages consumes it)",
 		removeQueueAria: "Remove queued message",
+		copyHistory: "Copy",
+		copyHistoryDone: "Copied",
+		deleteHistory: "Delete",
+		deleteHistoryAria: "Delete this history message",
 		previewImage: "[Image]",
 		previewFilePrefix: "[File]",
 		langLabel: "Lang",

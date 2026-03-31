@@ -17,6 +17,7 @@ import {
 	unlinkReply,
 	writeAnswerFile,
 	writePanelHistory,
+	writeQueue,
 	normalizePanelHistory,
 } from "./ipc";
 import { installMcpServer, removeMcpServer } from "./mcp-config";
@@ -54,7 +55,9 @@ alwaysApply: true
 - 如果可以，請透過工具的 \`reply\` 參數傳入已完成的回覆內容，以便擴充功能可以顯示／推送下一則訊息。
 - 你可以先呼叫其他 MCP 工具（例如 \`ask_question\`、\`send_progress\`），但在助理結束這次回覆之前，\`check_messages\` 仍然必須是最後一個 MCP 呼叫。
 - 當本輪任務會分成多個步驟（例如先分析、再實作、再驗證）時，建議在每個關鍵步驟完成後呼叫 \`send_progress\`，用簡短 Markdown 說明「已完成 / 目前狀態 / 下一步」。
-- 當你對使用者需求有多種合理解讀，或需要使用者在幾種策略之間做選擇時，請優先呼叫 \`ask_question\` 呈現 2–4 個具體選項，而不是自行假設。
+- 預設以「提供選項」讓使用者決定：需要確認需求、策略或取捨時，優先呼叫 \`ask_question\`，用 2–4 個具體選項讓使用者選擇，避免自行假設。
+- 在對話早期請先詢問一次提問偏好，並以選項讓使用者選擇：1) 每次都先問、2) 僅在不確定時才問、3) 由 AI 自動判斷是否提問；後續依該偏好執行。
+- 涉及是否使用 subagent 時，也請以選項詢問使用者；若使用者選擇要使用，助理應自行呼叫對應 subagent 執行。
 - 當遇到大型、含糊或有多種架構取捨的任務時，優先考慮切換到 Cursor 的「計畫模式（plan）」來先協助設計實作方案。
 - 需要切換到「計畫模式」時，先用一句話向使用者說明為何適合切換，並詢問是否要切換；只有在使用者同意後，才呼叫 \`SwitchMode\` 工具將模式切換為 \`plan\`。
 `;
@@ -399,8 +402,8 @@ export function deactivate(): void {
  * `viewType` 須與 package.json `contributes.views` 的 id 一致。
  */
 class MessengerViewProvider implements vscode.WebviewViewProvider {
-	/** 與 package.json 中 `mcpMessenger.mainView` 相同，註冊 provider 時使用。 */
-	static readonly viewType = "mcpMessenger.mainView";
+	/** 與 package.json 中 `mcp-cursor-message` 相同，註冊 provider 時使用。 */
+	static readonly viewType = "mcp-cursor-message";
 
 	constructor(
 		/** 擴充套件根目錄，用於載入 dist／media。 */
@@ -552,6 +555,27 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 							await unlinkPasteImageIfManaged(dir, removed);
 							await subtractTokensForQueueMessage(dir, removed);
 						}
+						await pushStateToPanel();
+						break;
+					}
+					// 佇列中尚未被取出的項目可編輯（文字內容／圖片 caption）。
+					case "updateQueueItem": {
+						const index = Number(msg.index);
+						if (!Number.isInteger(index) || index < 0) break;
+						const q = await readQueue(dir);
+						if (index >= q.length) break;
+						const target = q[index];
+						if (!target) break;
+						if (target.type === "text") {
+							const nextText = String(msg.content ?? "").trim();
+							if (!nextText) break;
+							target.content = nextText;
+						} else if (target.type === "image") {
+							target.caption = String(msg.caption ?? "").trim();
+						} else {
+							break;
+						}
+						await writeQueue(dir, q);
 						await pushStateToPanel();
 						break;
 					}

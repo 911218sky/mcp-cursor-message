@@ -24,6 +24,7 @@ export type WebviewHostMessage =
 	  }
 	| { type: "resetTokenStats" }
 	| { type: "removeQueueItem"; index?: unknown }
+	| { type: "updateQueueItem"; index?: unknown; content?: string; caption?: string }
 	| { type: "submitAnswer"; answers?: AnswerEntry[] }
 	| { type: "cancelQuestion" }
 	| { type: "ackReply" }

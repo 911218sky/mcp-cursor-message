@@ -8,10 +8,8 @@ import {
 	DEFAULT_FONT_SIZE,
 	loadFontSizeSetting,
 	loadHistoryPanelCollapsed,
-	loadReplyPanelCollapsed,
 	saveFontSizeSetting,
 	saveHistoryPanelCollapsed,
-	saveReplyPanelCollapsed,
 	type FontSizeSetting,
 } from "./prefs";
 import type {
@@ -45,11 +43,15 @@ type QueuePreviewItem = {
 	path?: string;
 	caption?: string;
 };
+type QueueEditState = {
+	index: number;
+	kind: "text" | "image";
+	seed: string;
+};
+type AiRunState = "idle" | "processing" | "done";
 type HistoryRole = PanelHistoryEntry["role"];
 const HISTORY_COLLAPSE_MIN_CHARS = 260;
 const HISTORY_COLLAPSE_MIN_LINES = 6;
-/** AI 回覆超過此長度時預設折疊，避免卡片過高。 */
-const REPLY_COLLAPSE_MIN_CHARS = 380;
 /** 歷史／摘要預設折疊時只顯示前段純文字，展開後才做完整 Markdown 解析（減少 DOM 與 marked 成本）。 */
 const LAZY_PREVIEW_MAX_CHARS = 360;
 
@@ -62,21 +64,21 @@ let lastUiLanguageSetting: PanelUiLanguageSetting = "en";
 /** 輸入框內 Ctrl+V 暫存之圖片（按「送出」才進佇列；可複數張）。 */
 let pendingPastes: PendingPaste[] = [];
 let curQuestion: QuestionPayload | null = null;
+/**
+ * 使用者按下取消/提交後，`ask_question` 會在短時間內清掉 `question.json`。
+ * 在 watcher debounce 與 IPC 推送的競速視窗裡，webview 可能會收到「仍存在舊題目」的 state。
+ * 這裡做樂觀抑制：在很短的時間內遇到相同 question id 時不重新顯示，避免看起來「關不掉」。
+ */
+let optimisticHiddenQuestionId: string | null = null;
+let optimisticHiddenAt = 0;
+const OPTIMISTIC_HIDE_MS = 3000;
 const selectedAnswers: Record<string, string[]> = {};
 /** 與 `messenger-data/history.json` 同步（經 `state` 與 `saveHistory`）。 */
 let historyEntries: PanelHistoryEntry[] = [];
 /** 用於避免同一則 reply 在 state 重推時重複寫入歷史。 */
 let lastSeenReplyContent = "";
 let isHistoryPanelCollapsed = false;
-let isReplyPanelCollapsed = false;
-/** Reply 卡片目前是否展開（僅前端顯示狀態）。 */
-let isReplyExpanded = false;
-/** 長摘要折疊時延後完整 Markdown 渲染，於首次展開時使用。 */
-let pendingReplyMarkdown = "";
-/** 與 `renderReply` 同步，用於新摘要抵達時重置展開狀態。 */
-let lastReplyExpandKey = "";
-/** 目前摘要是否已至少完整跑過 Markdown（含使用者展開後），避免 state 重推時又變回純預覽。 */
-let replyMarkdownHydrated = false;
+let queueEditState: QueueEditState | null = null;
 
 function S() {
 	return strings(uiLocale);
@@ -89,14 +91,6 @@ function applyChrome(loc: UiLocale): void {
 	chromeTopbarTitle.textContent = t.topbarTitle;
 	chromeTopbarSub.innerHTML = t.topbarSubHtml;
 	chromeQuestionCardTitle.textContent = t.questionCardTitle;
-	chromeReplyTitle.textContent = t.replyCardTitle;
-	btnToggleReplyPanel.textContent = isReplyPanelCollapsed
-		? t.replyPanelExpand
-		: t.replyPanelCollapse;
-	replyAck.textContent = t.replyAck;
-	btnToggleReply.textContent = isReplyExpanded
-		? t.replyCollapse
-		: t.replyExpand;
 	chromeHistoryTitle.textContent = t.historyTitle;
 	btnClearHistory.textContent = t.historyClear;
 	btnToggleHistoryPanel.textContent = isHistoryPanelCollapsed
@@ -116,6 +110,7 @@ function applyChrome(loc: UiLocale): void {
 	updateLanguageSelect(lastUiLanguageSetting);
 	updateFontSizeSelect(currentFontSize);
 	renderTokenStats(lastTokenStats);
+	renderAiRunStatus(lastQueue, lastSeenReplyContent);
 }
 
 /** 頂欄語言選單文案與目前設定值。 */
@@ -148,10 +143,6 @@ const mainScroll = $("mainScroll");
 /** 問答與回覆卡片區塊。 */
 const questionCard = $("questionCard");
 const questionBody = $("questionBody");
-const replyCard = $("replyCard");
-const replyContent = $("replyContent");
-const btnToggleReply = $("btnToggleReply") as HTMLButtonElement;
-const btnToggleReplyPanel = $("btnToggleReplyPanel") as HTMLButtonElement;
 const historyList = $("historyList");
 const btnClearHistory = $("btnClearHistory") as HTMLButtonElement;
 const historyCard = btnClearHistory.closest(".card--history");
@@ -160,6 +151,7 @@ const btnToggleHistoryPanel = $("btnToggleHistoryPanel") as HTMLButtonElement;
 /** 佇列預覽與 token 顯示區。 */
 const queuePreview = $("queuePreview");
 const tokenInline = $("tokenInline");
+const aiRunStatus = $("aiRunStatus");
 
 /** 輸入與貼圖組件。 */
 const msgInput = $("msgInput") as HTMLTextAreaElement;
@@ -170,7 +162,6 @@ const composerPasteThumbs = $("composerPasteThumbs");
 /** 頂欄互動控制。 */
 const uiLanguageSelect = $("uiLanguageSelect") as HTMLSelectElement;
 const fontSizeSelect = $("fontSizeSelect") as HTMLSelectElement;
-const replyAck = $("replyAck");
 const btnOpenSettings = $("btnOpenSettings") as HTMLButtonElement;
 const settingsDialog = $("settingsDialog");
 const btnCloseSettings = $("btnCloseSettings") as HTMLButtonElement;
@@ -179,7 +170,6 @@ const btnCloseSettings = $("btnCloseSettings") as HTMLButtonElement;
 const chromeTopbarTitle = $("chromeTopbarTitle");
 const chromeTopbarSub = $("chromeTopbarSub");
 const chromeQuestionCardTitle = $("chromeQuestionCardTitle");
-const chromeReplyTitle = $("chromeReplyTitle");
 const chromeHistoryTitle = $("chromeHistoryTitle");
 const chromeQueueTitle = $("chromeQueueTitle");
 const chromeComposerLabel = $("chromeComposerLabel");
@@ -216,6 +206,30 @@ function esc(s: string): string {
 		.replace(/>/g, "&gt;");
 }
 
+async function copyToClipboard(text: string): Promise<boolean> {
+	try {
+		if (navigator.clipboard?.writeText) {
+			await navigator.clipboard.writeText(text);
+			return true;
+		}
+	} catch {
+		/* fall through */
+	}
+	try {
+		const ta = document.createElement("textarea");
+		ta.value = text;
+		ta.style.position = "fixed";
+		ta.style.left = "-9999px";
+		document.body.appendChild(ta);
+		ta.select();
+		const ok = document.execCommand("copy");
+		document.body.removeChild(ta);
+		return ok;
+	} catch {
+		return false;
+	}
+}
+
 /** 摺疊預覽用：截斷純文字（不經 Markdown），必要時加省略號。 */
 function historyPreviewPlain(text: string, maxChars: number): string {
 	const t = text.trim();
@@ -227,6 +241,8 @@ function historyPreviewPlain(text: string, maxChars: number): string {
 function hideQuestionCard(): void {
 	questionCard.classList.add("hidden");
 	curQuestion = null;
+	optimisticHiddenQuestionId = null;
+	optimisticHiddenAt = 0;
 }
 
 /** 取得指定題目的「其他補充」輸入框。 */
@@ -247,6 +263,17 @@ function renderQuestion(q: QuestionPayload | null): void {
 		q.questions.length === 0
 	) {
 		hideQuestionCard();
+		return;
+	}
+
+	// 樂觀抑制：在「取消/提交剛發出」但 state 尚未反映完成時，避免舊題目閃回。
+	if (
+		optimisticHiddenQuestionId &&
+		q.id === optimisticHiddenQuestionId &&
+		Date.now() - optimisticHiddenAt < OPTIMISTIC_HIDE_MS
+	) {
+		questionCard.classList.add("hidden");
+		curQuestion = null;
 		return;
 	}
 
@@ -300,6 +327,7 @@ function toggleOpt(el: HTMLElement): void {
 /** 收集各題選項與補充說明，透過 `submitAnswer` 交給擴充寫入 `answer.json`。 */
 function submitQ(): void {
 	if (!curQuestion) return;
+	const dismissedId = curQuestion.id;
 	const answers: QuestionAnswer[] = [];
 	for (const qi of curQuestion.questions) {
 		const otherInput = getQuestionOtherInput(qi.id);
@@ -311,77 +339,17 @@ function submitQ(): void {
 	}
 	vscode.postMessage({ type: "submitAnswer", answers });
 	hideQuestionCard();
+	optimisticHiddenQuestionId = dismissedId;
+	optimisticHiddenAt = Date.now();
 }
 
 /** 使用者取消作答：送空答案讓 MCP 端可結束等待（行為與擴充約定一致）。 */
 function cancelQ(): void {
+	const dismissedId = curQuestion?.id ?? null;
 	vscode.postMessage({ type: "cancelQuestion" });
 	hideQuestionCard();
-}
-
-/**
- * 顯示或隱藏 `check_messages`／`send_progress` 寫入的摘要（`reply.json`）。
- * 無內容時清空 DOM 並移除 `reply-content--md`，避免隱藏後仍殘留 HTML／樣式，下次顯示其他內容時誤用 MD 排版。
- */
-function renderReply(content: string | undefined): void {
-	if (!content) {
-		replyCard.classList.add("hidden");
-		replyContent.innerHTML = "";
-		replyContent.classList.remove("reply-content--md");
-		replyContent.classList.remove("is-collapsed");
-		replyContent.removeAttribute("data-reply-lazy");
-		btnToggleReply.classList.add("hidden");
-		isReplyExpanded = false;
-		pendingReplyMarkdown = "";
-		lastReplyExpandKey = "";
-		replyMarkdownHydrated = false;
-		return;
-	}
-	const trimmed = content.trim();
-	if (trimmed !== lastReplyExpandKey) {
-		isReplyExpanded = false;
-		replyMarkdownHydrated = false;
-		lastReplyExpandKey = trimmed;
-	}
-	// 長回覆預設折疊，讓使用者先看到歷史與最新訊息；折疊時僅插入純文字預覽，展開後才跑 Markdown。
-	const shouldCollapse = content.length > REPLY_COLLAPSE_MIN_CHARS;
-	if (!shouldCollapse) {
-		isReplyExpanded = false;
-		pendingReplyMarkdown = "";
-		replyMarkdownHydrated = true;
-		replyContent.removeAttribute("data-reply-lazy");
-		replyContent.classList.add("reply-content--md");
-		replyContent.innerHTML = markdownToSafeHtml(content);
-		replyContent.classList.remove("is-collapsed");
-		btnToggleReply.classList.add("hidden");
-		replyCard.classList.remove("hidden");
-		replyCard.classList.toggle("is-collapsed", isReplyPanelCollapsed);
-		return;
-	}
-	replyContent.classList.add("reply-content--md");
-	const useLazyPreview =
-		shouldCollapse && !isReplyExpanded && !replyMarkdownHydrated;
-	if (useLazyPreview) {
-		pendingReplyMarkdown = content;
-		replyContent.textContent = historyPreviewPlain(content, LAZY_PREVIEW_MAX_CHARS);
-		replyContent.dataset.replyLazy = "1";
-	} else {
-		pendingReplyMarkdown = "";
-		replyMarkdownHydrated = true;
-		replyContent.removeAttribute("data-reply-lazy");
-		replyContent.innerHTML = markdownToSafeHtml(content);
-	}
-	replyContent.classList.toggle("is-collapsed", shouldCollapse && !isReplyExpanded);
-	btnToggleReply.classList.toggle("hidden", !shouldCollapse);
-	if (shouldCollapse) {
-		const tr = S();
-		btnToggleReply.textContent = isReplyExpanded
-			? tr.replyCollapse
-			: tr.replyExpand;
-		btnToggleReply.setAttribute("aria-expanded", String(isReplyExpanded));
-	}
-	replyCard.classList.remove("hidden");
-	replyCard.classList.toggle("is-collapsed", isReplyPanelCollapsed);
+	optimisticHiddenQuestionId = dismissedId;
+	optimisticHiddenAt = Date.now();
 }
 
 /** 依 `lastSeenReplyContent` 對齊「最後一則 AI」內容，供與 `reply.json` 去重。 */
@@ -467,7 +435,8 @@ function renderHistory(): void {
 			const longByLines =
 				item.content.split(/\r?\n/).filter((line) => line.trim().length > 0).length >
 				HISTORY_COLLAPSE_MIN_LINES;
-			const shouldCollapse = longByChars || longByLines;
+			const isLatest = i === historyEntries.length - 1;
+			const shouldCollapse = (longByChars || longByLines) && !isLatest;
 			const previewPlain = historyPreviewPlain(
 				item.content,
 				LAZY_PREVIEW_MAX_CHARS,
@@ -493,7 +462,7 @@ function renderHistory(): void {
 			const toggleBtn = shouldCollapse
 				? `<button type="button" class="history-toggle" data-expanded="false" aria-expanded="false">${esc(tr.historyExpand)}</button>`
 				: "";
-			return `<div class="history-item history-item--${item.role}"><div class="history-item-head">${who}</div><div class="${bodyClass}"${bodyAttrs}>${bodyInner}</div>${toggleBtn}</div>`;
+			return `<div class="history-item history-item--${item.role}"><div class="history-item-head"><span>${who}</span><div class="history-head-actions"><button type="button" class="history-copy" data-copy-index="${i}" aria-label="${esc(tr.copyHistory)}">${esc(tr.copyHistory)}</button><button type="button" class="history-delete" data-delete-index="${i}" aria-label="${esc(tr.deleteHistoryAria)}">${esc(tr.deleteHistory)}</button></div></div><div class="${bodyClass}"${bodyAttrs}>${bodyInner}</div>${toggleBtn}</div>`;
 		})
 		.join("");
 	historyList.innerHTML = html;
@@ -517,19 +486,33 @@ function setHistoryPanelCollapsed(next: boolean): void {
 	saveHistoryPanelCollapsed(next);
 }
 
-function setReplyPanelCollapsed(next: boolean): void {
-	isReplyPanelCollapsed = next;
-	replyCard.classList.toggle("is-collapsed", next);
-	const tr = S();
-	btnToggleReplyPanel.setAttribute("aria-expanded", String(!next));
-	btnToggleReplyPanel.textContent = next
-		? tr.replyPanelExpand
-		: tr.replyPanelCollapse;
-	saveReplyPanelCollapsed(next);
-}
-
 historyList.addEventListener("click", (ev) => {
 	const target = ev.target as HTMLElement | null;
+	const copyBtn = target?.closest?.(".history-copy") as HTMLButtonElement | null;
+	if (copyBtn) {
+		const idx = Number(copyBtn.getAttribute("data-copy-index"));
+		if (!Number.isInteger(idx) || idx < 0 || idx >= historyEntries.length) return;
+		const row = historyEntries[idx];
+		void copyToClipboard(row.content).then((ok) => {
+			const tr = S();
+			if (!ok) return;
+			copyBtn.textContent = tr.copyHistoryDone;
+			window.setTimeout(() => {
+				copyBtn.textContent = tr.copyHistory;
+			}, 1200);
+		});
+		return;
+	}
+	const deleteBtn = target?.closest?.(".history-delete") as HTMLButtonElement | null;
+	if (deleteBtn) {
+		const idx = Number(deleteBtn.getAttribute("data-delete-index"));
+		if (!Number.isInteger(idx) || idx < 0 || idx >= historyEntries.length) return;
+		historyEntries.splice(idx, 1);
+		persistHistory();
+		refreshLastSeenReplyFromHistory();
+		renderHistory();
+		return;
+	}
 	const btn = target?.closest?.(".history-toggle") as HTMLButtonElement | null;
 	if (!btn) return;
 	const item = btn.closest(".history-item");
@@ -582,19 +565,43 @@ function renderQueuePreview(queue: unknown): void {
 	const html = (queue as QueuePreviewItem[]).map((it, i) => {
 		const tp = it.type ?? "text";
 		let preview: string;
+		let hasEdit = false;
+		let editKind: "text" | "image" | "" = "";
 		if (tp === "text") {
 			preview = (it.content ?? "").slice(0, 80);
+			hasEdit = true;
+			editKind = "text";
 		} else if (tp === "image") {
 			const cap = String(it.caption ?? "").trim();
 			preview = cap
 				? `${tr.previewImage} · ${cap.slice(0, 60)}`
 				: tr.previewImage;
+			hasEdit = true;
+			editKind = "image";
 		} else {
 			preview = `${tr.previewFilePrefix} ${String(it.path ?? "").split(/[/\\]/).pop() ?? ""}`;
 		}
-		return `<div class="qp" role="group"><span class="qp-text">${esc(preview)}</span><button type="button" class="qp-remove" data-index="${i}" title="${esc(tr.removeQueueTitle)}" aria-label="${esc(tr.removeQueueAria)}">${esc(tr.removeQueue)}</button></div>`;
+		const editState = queueEditState;
+		const editing =
+			editState && editState.index === i && editState.kind === editKind;
+		if (editing) {
+			return `<div class="qp" role="group"><div class="qp-edit-wrap"><textarea class="qp-edit-input" data-edit-input="${i}" rows="2">${esc(editState.seed)}</textarea></div><div class="qp-actions"><button type="button" class="qp-save" data-index="${i}" data-edit-kind="${editKind}">${esc(tr.editQueueSave)}</button><button type="button" class="qp-cancel" data-index="${i}">${esc(tr.editQueueCancel)}</button><button type="button" class="qp-remove" data-index="${i}" title="${esc(tr.removeQueueTitle)}" aria-label="${esc(tr.removeQueueAria)}">${esc(tr.removeQueue)}</button></div></div>`;
+		}
+		const editBtn = hasEdit
+			? `<button type="button" class="qp-edit" data-index="${i}" data-edit-kind="${editKind}" title="${esc(tr.editQueueTitle)}">${esc(tr.editQueue)}</button>`
+			: "";
+		return `<div class="qp" role="group"><span class="qp-text">${esc(preview)}</span><div class="qp-actions">${editBtn}<button type="button" class="qp-remove" data-index="${i}" title="${esc(tr.removeQueueTitle)}" aria-label="${esc(tr.removeQueueAria)}">${esc(tr.removeQueue)}</button></div></div>`;
 	});
 	queuePreview.innerHTML = html.join("");
+	if (queueEditState) {
+		const input = queuePreview.querySelector(
+			`.qp-edit-input[data-edit-input="${queueEditState.index}"]`
+		) as HTMLTextAreaElement | null;
+		if (input) {
+			input.focus();
+			input.setSelectionRange(input.value.length, input.value.length);
+		}
+	}
 }
 
 /** 顯示側欄送入佇列之 token 約略累計（由擴充估算，非 Cursor 帳單實值）。 */
@@ -611,6 +618,31 @@ function renderTokenStats(ts: PanelTokenStats | undefined): void {
 			? String(ts.lastMessageEstimated)
 			: EMPTY_MARK;
 	tokenInline.textContent = t.tokenInline.replace("{total}", total).replace("{last}", last);
+}
+
+function deriveAiRunState(queue: unknown, replyContent: string): AiRunState {
+	if (Array.isArray(queue) && queue.length > 0) return "processing";
+	if (replyContent.trim()) return "done";
+	const last = historyEntries[historyEntries.length - 1];
+	if (last?.role === "assistant") return "done";
+	return "idle";
+}
+
+function renderAiRunStatus(queue: unknown, replyContent: string): void {
+	const t = S();
+	const state = deriveAiRunState(queue, replyContent);
+	aiRunStatus.classList.remove("is-processing", "is-done");
+	if (state === "processing") {
+		aiRunStatus.classList.add("is-processing");
+		aiRunStatus.textContent = t.aiStatusProcessing;
+		return;
+	}
+	if (state === "done") {
+		aiRunStatus.classList.add("is-done");
+		aiRunStatus.textContent = t.aiStatusDone;
+		return;
+	}
+	aiRunStatus.textContent = t.aiStatusIdle;
 }
 
 /**
@@ -631,7 +663,6 @@ window.addEventListener("message", (ev) => {
 	lastUiLanguageSetting = m.uiLanguageSetting;
 	applyChrome(m.uiLocale);
 	renderQuestion((m.question as QuestionPayload | null) ?? null);
-	renderReply(m.reply?.content);
 	const incomingReply = (m.reply?.content ?? "").trim();
 	if (incomingReply && incomingReply !== prevLastSeenReplyContent) {
 		const last = historyEntries[historyEntries.length - 1];
@@ -641,8 +672,21 @@ window.addEventListener("message", (ev) => {
 	}
 	lastSeenReplyContent = incomingReply;
 	renderQueuePreview(m.queue);
+	renderAiRunStatus(m.queue, incomingReply);
 	renderTokenStats(m.tokenStats);
 	renderHistory();
+});
+
+// 允許點擊問答遮罩背景與 `Esc` 也能取消（不會造成 XSS，僅觸發既有 cancelQ）。
+questionCard.addEventListener("click", (ev) => {
+	if (questionCard.classList.contains("hidden")) return;
+	if (ev.target !== questionCard) return;
+	cancelQ();
+});
+document.addEventListener("keydown", (ev) => {
+	if (ev.key !== "Escape") return;
+	if (questionCard.classList.contains("hidden")) return;
+	cancelQ();
 });
 
 /** 更新輸入區下方暫存貼圖縮圖列（尚未送出）。 */
@@ -771,27 +815,6 @@ $("btnPickFile").addEventListener("click", () => {
 	vscode.postMessage({ type: "pickQueueFiles", kind: "file" });
 });
 
-replyAck.addEventListener("click", () => {
-	vscode.postMessage({ type: "ackReply" });
-	replyCard.classList.add("hidden");
-});
-
-btnToggleReply.addEventListener("click", () => {
-	isReplyExpanded = !isReplyExpanded;
-	const tr = S();
-	if (isReplyExpanded && replyContent.dataset.replyLazy === "1" && pendingReplyMarkdown) {
-		replyContent.innerHTML = markdownToSafeHtml(pendingReplyMarkdown);
-		replyContent.removeAttribute("data-reply-lazy");
-		pendingReplyMarkdown = "";
-		replyMarkdownHydrated = true;
-	}
-	replyContent.classList.toggle("is-collapsed", !isReplyExpanded);
-	btnToggleReply.textContent = isReplyExpanded
-		? tr.replyCollapse
-		: tr.replyExpand;
-	btnToggleReply.setAttribute("aria-expanded", String(isReplyExpanded));
-});
-
 btnClearHistory.addEventListener("click", () => {
 	historyEntries = [];
 	persistHistory();
@@ -800,10 +823,6 @@ btnClearHistory.addEventListener("click", () => {
 
 btnToggleHistoryPanel.addEventListener("click", () => {
 	setHistoryPanelCollapsed(!isHistoryPanelCollapsed);
-});
-
-btnToggleReplyPanel.addEventListener("click", () => {
-	setReplyPanelCollapsed(!isReplyPanelCollapsed);
 });
 
 btnOpenSettings.addEventListener("click", () => {
@@ -821,6 +840,54 @@ settingsDialog.addEventListener("click", (ev) => {
 /** 佇列預覽列：事件委派至 `.qp-remove`，避免每次重繪佇列時重綁多顆按鈕。 */
 queuePreview.addEventListener("click", (e) => {
 	const t = e.target as HTMLElement | null;
+	const editBtn = t?.closest?.(".qp-edit") as HTMLElement | null;
+	if (editBtn) {
+		e.preventDefault();
+		const idx = Number(editBtn.getAttribute("data-index"));
+		const kind = String(editBtn.getAttribute("data-edit-kind") ?? "");
+		if (!Number.isInteger(idx) || idx < 0) return;
+		const current = (lastQueue as QueuePreviewItem[] | undefined)?.[idx];
+		if (!current) return;
+		const seed =
+			kind === "image"
+				? String(current.caption ?? "")
+				: String(current.content ?? "");
+		queueEditState = {
+			index: idx,
+			kind: kind === "image" ? "image" : "text",
+			seed,
+		};
+		renderQueuePreview(lastQueue);
+		return;
+	}
+	const saveBtn = t?.closest?.(".qp-save") as HTMLElement | null;
+	if (saveBtn) {
+		e.preventDefault();
+		const idx = Number(saveBtn.getAttribute("data-index"));
+		const kind = String(saveBtn.getAttribute("data-edit-kind") ?? "");
+		if (!Number.isInteger(idx) || idx < 0) return;
+		const input = queuePreview.querySelector(
+			`.qp-edit-input[data-edit-input="${idx}"]`
+		) as HTMLTextAreaElement | null;
+		if (!input) return;
+		const next = input.value.trim();
+		if (kind === "image") {
+			vscode.postMessage({ type: "updateQueueItem", index: idx, caption: next });
+		} else {
+			if (!next) return;
+			vscode.postMessage({ type: "updateQueueItem", index: idx, content: next });
+		}
+		queueEditState = null;
+		renderQueuePreview(lastQueue);
+		return;
+	}
+	const cancelBtn = t?.closest?.(".qp-cancel") as HTMLElement | null;
+	if (cancelBtn) {
+		e.preventDefault();
+		queueEditState = null;
+		renderQueuePreview(lastQueue);
+		return;
+	}
 	const btn = t?.closest?.(".qp-remove") as HTMLElement | null;
 	if (!btn) return;
 	e.preventDefault();
@@ -832,8 +899,6 @@ queuePreview.addEventListener("click", (e) => {
 panelMain.classList.remove("hidden");
 isHistoryPanelCollapsed = loadHistoryPanelCollapsed();
 setHistoryPanelCollapsed(isHistoryPanelCollapsed);
-isReplyPanelCollapsed = loadReplyPanelCollapsed();
-setReplyPanelCollapsed(isReplyPanelCollapsed);
 renderHistory();
 
 /** 暫存貼圖列：移除單張預覽（僅前端狀態，未送出前可刪）。 */
