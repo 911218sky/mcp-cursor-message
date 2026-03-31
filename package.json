@@ -4,7 +4,18 @@
 	"description": "MCP side-channel chat: sidebar queue, check_messages / ask_question; Cursor integration.",
 	"version": "9.3.19",
 	"author": "911218sky",
-	"publisher": "local",
+	"publisher": "911218sky",
+	"keywords": [
+		"mcp",
+		"model context protocol",
+		"cursor",
+		"chat",
+		"sidebar",
+		"queue",
+		"assistant",
+		"copilot",
+		"workflow"
+	],
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/911218sky/mcp-cursor-message.git"
@@ -48,6 +59,10 @@
 			{
 				"command": "mcpMessenger.removeMcp",
 				"title": "mcp-cursor-message: Remove MCP configuration"
+			},
+			{
+				"command": "mcpMessenger.checkForUpdates",
+				"title": "mcp-cursor-message: Check for updates (GitHub)"
 			}
 		],
 		"configuration": {
@@ -62,6 +77,28 @@
 					],
 					"default": "en",
 					"description": "Sidebar Webview UI language. Default English; auto follows the editor display language."
+				},
+				"mcpMessenger.updateCheck.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Check GitHub Releases for newer versions and offer to download/install the VSIX."
+				},
+				"mcpMessenger.updateCheck.intervalHours": {
+					"type": "number",
+					"default": 12,
+					"minimum": 1,
+					"description": "How often to check GitHub Releases for updates (hours)."
+				},
+				"mcpMessenger.updateCheck.startupDelaySeconds": {
+					"type": "number",
+					"default": 15,
+					"minimum": 0,
+					"description": "Delay before the first update check after startup (seconds). Set to 0 to check immediately."
+				},
+				"mcpMessenger.updateCheck.repo": {
+					"type": "string",
+					"default": "911218sky/mcp-cursor-message",
+					"description": "GitHub repo in owner/name form used for update checks."
 				}
 			}
 		}

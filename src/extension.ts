@@ -32,6 +32,7 @@ import {
 	resetTokenStats,
 	subtractTokensForQueueMessage,
 } from "./token-stats";
+import { runUpdateCheck, scheduleUpdateChecks } from "./update-check";
 
 /** 目前 IPC 根目錄（工作區或 globalStorage 下的 messenger-data）。 */
 let dataDir: string = "";
@@ -273,6 +274,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		})
 	);
 
+	// 命令：檢查 GitHub Releases 是否有新版（下載 VSIX 後嘗試觸發安裝）。
+	context.subscriptions.push(
+		vscode.commands.registerCommand("mcpMessenger.checkForUpdates", async () => {
+			try {
+				await runUpdateCheck(context, { force: true });
+			} catch {
+				// ignore
+			}
+		})
+	);
+
 	// 監聽佇列／問答等 JSON，變更時防抖後推狀態至 Webview。
 	startDataDirWatcher();
 
@@ -294,6 +306,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	// 有工作區時靜默寫入 MCP 條目（與命令 Install MCP configuration 相同）；失敗只打 log。
 	void autoInstallMcpIfWorkspace(context);
+
+	// 定期檢查 GitHub Releases：若有新版則提供下載並嘗試觸發安裝。
+	scheduleUpdateChecks(context);
 }
 
 /** 監聽 `messenger-data/*.json` 變化，防抖後推送最新佇列／問答／摘要至側欄。 */
