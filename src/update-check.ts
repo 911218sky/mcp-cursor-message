@@ -87,49 +87,66 @@ async function downloadToFile(url: string, dest: string): Promise<boolean> {
 	await fs.mkdir(path.dirname(dest), { recursive: true });
 	const tmp = dest + ".tmp";
 
-	return await new Promise((resolve) => {
-		const fileStream = fs
-			.open(tmp, "w")
-			.then((fh) => fh.createWriteStream())
-			.catch(() => null);
+	const download = async (u: string, depth: number): Promise<boolean> => {
+		if (depth > 5) return false;
 
-		void (async () => {
-			const ws = await fileStream;
-			if (!ws) {
-				resolve(false);
-				return;
-			}
-			const req = https.get(
-				url,
-				{
-					headers: {
-						"User-Agent": "mcp-cursor-message-vscode-extension",
-						Accept: "application/octet-stream",
-					},
-				},
-				(res) => {
-					const code = res.statusCode ?? 0;
-					if (code < 200 || code >= 300) {
-						res.resume();
-						ws.close();
-						resolve(false);
-						return;
-					}
-					res.pipe(ws);
-					ws.on("finish", async () => {
-						try {
-							ws.close();
-							await fs.rename(tmp, dest);
-							resolve(true);
-						} catch {
-							resolve(false);
-						}
-					});
+		return await new Promise((resolve) => {
+			const fileStream = fs
+				.open(tmp, "w")
+				.then((fh) => fh.createWriteStream())
+				.catch(() => null);
+
+			void (async () => {
+				const ws = await fileStream;
+				if (!ws) {
+					resolve(false);
+					return;
 				}
-			);
-			req.on("error", () => resolve(false));
-		})();
-	});
+				const req = https.get(
+					u,
+					{
+						headers: {
+							"User-Agent": "mcp-cursor-message-vscode-extension",
+							Accept: "application/octet-stream",
+						},
+					},
+					(res) => {
+						const code = res.statusCode ?? 0;
+						if ([301, 302, 303, 307, 308].includes(code)) {
+							const loc = String(res.headers.location ?? "").trim();
+							res.resume();
+							ws.close();
+							if (!loc) {
+								resolve(false);
+								return;
+							}
+							void download(loc, depth + 1).then(resolve);
+							return;
+						}
+						if (code < 200 || code >= 300) {
+							res.resume();
+							ws.close();
+							resolve(false);
+							return;
+						}
+						res.pipe(ws);
+						ws.on("finish", async () => {
+							try {
+								ws.close();
+								await fs.rename(tmp, dest);
+								resolve(true);
+							} catch {
+								resolve(false);
+							}
+						});
+					}
+				);
+				req.on("error", () => resolve(false));
+			})();
+		});
+	};
+
+	return await download(url, 0);
 }
 
 async function installVsixAndReload(vsixPath: string): Promise<void> {
