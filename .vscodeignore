@@ -4,7 +4,6 @@ INSTALL.md
 !.cursor/rules/
 !.cursor/rules/must-call-check-messages.mdc
 !.cursor/rules/three-phase-workflow.mdc
-!.cursor/rules/code-review-agents.mdc
 .github/**
 bun.lock
 node_modules/**

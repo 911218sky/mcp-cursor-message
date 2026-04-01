@@ -90,7 +90,6 @@ function messengerDataDirForContext(context: vscode.ExtensionContext): string {
 const BUNDLED_CURSOR_RULE_FILES = [
 	"must-call-check-messages.mdc",
 	"three-phase-workflow.mdc",
-	"code-review-agents.mdc",
 ] as const;
 
 /**
@@ -99,7 +98,6 @@ const BUNDLED_CURSOR_RULE_FILES = [
  * 來源順序：`工作區/src/rules` → `extensionPath/src/rules` → `extensionPath/.cursor/rules`（VSIX 內由 compile 自 src 同步）。
  * `must-call-check-messages.mdc`：側欄佇列與 `check_messages` 串接。
  * `three-phase-workflow.mdc`：分析→方案→實作之三階段工作流。
- * `code-review-agents.mdc`：建置檢查與 code review subagent 委派指引。
  */
 async function ensureBundledCursorRules(
 	context: vscode.ExtensionContext

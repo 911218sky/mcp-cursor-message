@@ -1,8 +1,0 @@
----
-alwaysApply: true
----
-# 建置與 code review（本儲存庫）
-
-變更後請依工作區根目錄 **AGENTS.md** 做建置驗證：修改 `src/`、`mcp-server/` 或 `esbuild.config.mjs` 後執行 `bun run compile`；若動到打包或 `package.json`，再執行 `bun run package`。
-
-若任務涉及 code review 或委派 subagent 審查，遵守 AGENTS.md 的 Git 同意、小步提交、IPC／MCP 契約與文件更新邊界。

@@ -56,7 +56,7 @@ alwaysApply: true
 
 **必須做的事**：
 
-- 依既定方案實作；變更後執行專案慣例的**型別／建置檢查**（本儲存庫為 `bun run compile`；若動到打包則依 `AGENTS.md`／`code-review-agents.mdc` 補跑 `bun run package`）。
+- 依既定方案實作；變更後執行專案慣例的**型別／建置檢查**（本儲存庫為 `bun run compile`；若動到打包則依 `AGENTS.md` 補跑 `bun run package`）。
 
 **絕對禁止**：
 
