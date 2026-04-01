@@ -89,12 +89,14 @@ function messengerDataDirForContext(context: vscode.ExtensionContext): string {
 /** 擴充套件內建、可自動補進工作區 `.cursor/rules/` 的規則檔（已存在則不覆寫）。 */
 const BUNDLED_CURSOR_RULE_FILES = [
 	"must-call-check-messages.mdc",
+	"three-phase-workflow.mdc",
 	"code-review-agents.mdc",
 ] as const;
 
 /**
  * 若工作區缺少內建規則檔，則在啟用/切換工作區時各補一份。
  * `must-call-check-messages.mdc`：側欄佇列與 `check_messages` 串接。
+ * `three-phase-workflow.mdc`：分析→方案→實作之三階段工作流。
  * `code-review-agents.mdc`：建置檢查與 code review subagent 委派指引。
  */
 async function ensureBundledCursorRules(
