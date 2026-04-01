@@ -46,6 +46,57 @@ These rules complement the `SYSTEM_SUFFIX` instructions returned by `check_messa
 2. Open a **folder** workspace and run the command **mcp-cursor-message: Install MCP configuration** from the Command Palette so MCP points at the same data directory as the sidebar. Restart the editor if MCP does not appear.
 3. **Cursor:** Open **Cursor Settings → MCP** and **enable** the **mcp-cursor-message** server (or confirm it appears and is turned on). The sidebar works without this, but the agent **cannot** call `check_messages` until MCP is active for your workspace.
 
+## Commands (extension)
+
+Open the **Command Palette** (*View → Command Palette*, or `Ctrl+Shift+P` on Windows/Linux, `Cmd+Shift+P` on macOS). Type `mcp-cursor-message` or part of the command title, then press Enter.
+
+| Command ID | Title | What it does |
+|------------|-------|----------------|
+| `mcpMessenger.setupMcp` | **mcp-cursor-message: Install MCP configuration** | Writes/merges `.cursor/mcp.json` in the workspace, registers the MCP server, and sets `MESSENGER_DATA_DIR` to match the sidebar data folder. Requires a **folder** workspace. |
+| `mcpMessenger.removeMcp` | **mcp-cursor-message: Remove MCP configuration** | Removes this extension’s MCP entry from `.cursor/mcp.json` (does not delete the whole file). |
+| `mcpMessenger.checkForUpdates` | **mcp-cursor-message: Check for updates (GitHub)** | Manually checks GitHub Releases for a newer VSIX (honors `mcpMessenger.updateCheck.*` settings). |
+
+*Traditional Chinese version of this section:* [README.tw.md](./README.tw.md)
+
+## MCP server tools
+
+These are **not** Command Palette entries. The **AI agent** invokes them when **Cursor** (or another MCP client) has the **mcp-cursor-message** server enabled.
+
+Enable the server under **Cursor Settings → MCP**. The model calls tools by name from the agent tool list; parameters are defined in `mcp-server/index.ts` (`registerTool`).
+
+| Tool | Summary |
+|------|---------|
+| `check_messages` | Optional `reply` (Markdown) pushed to the sidebar. **Blocks** until the sidebar queue delivers a message or the wait times out. In typical flows this should be the **last** MCP call before ending a turn. |
+| `send_progress` | Required `progress` (Markdown). **Non-blocking**; updates the sidebar progress line. |
+| `ask_question` | Required `questions`. **Blocks** until the user answers in the sidebar (single/multi choice and optional free text). |
+
+*Traditional Chinese version:* [README.tw.md](./README.tw.md)
+
+## Settings
+
+All keys live under the **`mcpMessenger`** prefix. In the editor: **Settings** → search **MCP chat**, or edit **User/Workspace `settings.json`** manually.
+
+| Setting | Type | Default | What it does |
+|---------|------|---------|----------------|
+| `mcpMessenger.uiLanguage` | `en` \| `zh` \| `auto` | `en` | Sidebar Webview language. **`auto`** follows the editor UI language (non-English → Chinese UI). |
+| `mcpMessenger.mergeEverythingClaudeCode.enabled` | boolean | `true` | When **`true`** (default), merges bundled or workspace **`everything-claude-code/.cursor`** seeds into **`<workspace>/.cursor`** (missing files only) on startup, folder change, or when you toggle this on. Set **`false`** to disable merging. |
+| `mcpMessenger.updateCheck.enabled` | boolean | `true` | When **`false`**, no update checks run (background or Command Palette), and no GitHub requests. |
+| `mcpMessenger.updateCheck.intervalHours` | number (≥ 1) | `12` | Hours between automatic update checks. |
+| `mcpMessenger.updateCheck.startupDelaySeconds` | number (≥ 0) | `15` | Seconds to wait after startup before the **first** check; **`0`** runs immediately. |
+| `mcpMessenger.updateCheck.repo` | string | `911218sky/mcp-cursor-message` | GitHub repo in **`owner/name`** form used for release checks. |
+| `mcpMessenger.updateCheck.versionCompare` | `patch` \| `minor` \| `major` \| `off` | `minor` | **“Is newer”** always uses full **MAJOR.MINOR.PATCH** vs `releases/latest`. **`patch`** = background notify on any newer tag; **`minor`** (default) = only **minor** or **major** bumps (skip **patch-only**); **`major`** = **major** bumps only; **`off`** = no checks. **Manual** “Check for updates” **ignores** patch/minor/major filters (still blocked when `off` or `enabled: false`). Legacy values **`full`** and **`majorMinor`** map to **`patch`** and **`minor`**. |
+
+```json
+{
+  "mcpMessenger.uiLanguage": "auto",
+  "mcpMessenger.updateCheck.enabled": true,
+  "mcpMessenger.updateCheck.versionCompare": "minor",
+  "mcpMessenger.updateCheck.repo": "911218sky/mcp-cursor-message"
+}
+```
+
+*Traditional Chinese settings guide:* [README.tw.md](./README.tw.md)
+
 ### Install from source
 
 Clone the repository, install dependencies with **Bun**, build the extension package, then install the generated `.vsix` the same way as a release build:

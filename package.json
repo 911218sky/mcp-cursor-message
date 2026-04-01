@@ -78,10 +78,15 @@
 					"default": "en",
 					"description": "Sidebar Webview UI language. Default English; auto follows the editor display language."
 				},
+				"mcpMessenger.mergeEverythingClaudeCode.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "When true (default), merge bundled/workspace everything-claude-code `.cursor` seeds into the workspace `.cursor` on startup, workspace folder change, or when this setting is turned on. Set false to skip merging."
+				},
 				"mcpMessenger.updateCheck.enabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "Check GitHub Releases for newer versions and offer to download/install the VSIX."
+					"description": "Set to false to disable all automatic/manual update checks (no GitHub requests). When true, checks run per interval / command."
 				},
 				"mcpMessenger.updateCheck.intervalHours": {
 					"type": "number",
@@ -99,6 +104,17 @@
 					"type": "string",
 					"default": "911218sky/mcp-cursor-message",
 					"description": "GitHub repo in owner/name form used for update checks."
+				},
+				"mcpMessenger.updateCheck.versionCompare": {
+					"type": "string",
+					"enum": [
+						"patch",
+						"minor",
+						"major",
+						"off"
+					],
+					"default": "minor",
+					"description": "Update policy vs GitHub releases/latest (full SemVer for “is newer”): patch = background notify on any newer tag; minor = notify only on MINOR or MAJOR bump (skips patch-only); major = notify only on MAJOR bump; off = no checks. Manual \"Check for updates\" ignores patch/minor/major and always offers the latest if newer."
 				}
 			}
 		}

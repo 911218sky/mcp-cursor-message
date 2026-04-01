@@ -33,6 +33,30 @@ import {
 	subtractTokensForQueueMessage,
 } from "./token-stats";
 import { runUpdateCheck, scheduleUpdateChecks } from "./update-check";
+import { mergeEverythingClaudeCodeCursor } from "./merge-claude-code-cursor";
+
+const CFG_MERGE_ECC = "mergeEverythingClaudeCode.enabled";
+
+function isMergeEverythingClaudeCodeEnabled(): boolean {
+	return (
+		vscode.workspace.getConfiguration("mcpMessenger").get<boolean>(CFG_MERGE_ECC) ===
+		true
+	);
+}
+
+/** 設定開啟時，將 everything-claude-code 的 `.cursor` 種子合併進工作區（不覆寫既有檔案）。 */
+async function mergeEverythingClaudeCodeIfEnabled(
+	context: vscode.ExtensionContext,
+	workspaceRoot: string
+): Promise<void> {
+	if (!isMergeEverythingClaudeCodeEnabled()) return;
+	const extVer = String(context.extension.packageJSON?.version ?? "").trim();
+	await mergeEverythingClaudeCodeCursor(
+		workspaceRoot,
+		context.extensionPath,
+		extVer || undefined
+	);
+}
 
 /** 目前 IPC 根目錄（工作區或 globalStorage 下的 messenger-data）。 */
 let dataDir: string = "";
@@ -44,24 +68,6 @@ let panelView: vscode.WebviewView | undefined;
 let debounceTimer: NodeJS.Timeout | undefined;
 /** `messenger-data/*.json` 變更後延遲推送側欄狀態（毫秒）。 */
 const PUSH_STATE_DEBOUNCE_MS = 100;
-
-/** 確保 workspace 內的規則檔存在：缺失時 AI 佇列串接可能無法接續。 */
-const MUST_CALL_CHECK_MESSAGES_RULE_MDC = `---
-alwaysApply: true
----
-當使用者正在使用側邊欄佇列，且已載入 \`mcp-cursor-message\` MCP 伺服器時：
-
-- 在每一次助理回覆中，於結束對使用者的訊息之前，最後一個 MCP 工具呼叫必須是 \`mcp-cursor-message\` MCP 伺服器上的 \`check_messages\`。
-- 若 \`check_messages\` 回傳的系統訊息為「沒有新訊息 / 等待已被中斷 / 請再次呼叫」這類提示，請不要將該訊息輸出給使用者；而是要在同一次回覆流程中持續再次呼叫 \`check_messages\`，直到取得實際排隊中的訊息（或工具呼叫被強制終止）。
-- 如果可以，請透過工具的 \`reply\` 參數傳入已完成的回覆內容，以便擴充功能可以顯示／推送下一則訊息。
-- 你可以先呼叫其他 MCP 工具（例如 \`ask_question\`、\`send_progress\`），但在助理結束這次回覆之前，\`check_messages\` 仍然必須是最後一個 MCP 呼叫。
-- 當本輪任務會分成多個步驟（例如先分析、再實作、再驗證）時，建議在每個關鍵步驟完成後呼叫 \`send_progress\`，用簡短 Markdown 說明「已完成 / 目前狀態 / 下一步」。
-- 預設以「提供選項」讓使用者決定：需要確認需求、策略或取捨時，優先呼叫 \`ask_question\`，用 2–4 個具體選項讓使用者選擇，避免自行假設。
-- 在對話早期請先詢問一次提問偏好，並以選項讓使用者選擇：1) 每次都先問、2) 僅在不確定時才問、3) 由 AI 自動判斷是否提問；後續依該偏好執行。
-- 涉及是否使用 subagent 時，也請以選項詢問使用者；若使用者選擇要使用，助理應自行呼叫對應 subagent 執行。
-- 當遇到大型、含糊或有多種架構取捨的任務時，優先考慮切換到 Cursor 的「計畫模式（plan）」來先協助設計實作方案。
-- 需要切換到「計畫模式」時，先用一句話向使用者說明為何適合切換，並詢問是否要切換；只有在使用者同意後，才呼叫 \`SwitchMode\` 工具將模式切換為 \`plan\`。
-`;
 
 /** `panel.html` 原始模板（僅 nonce／URI 每輪替換），避免 `resolveWebviewView` 重入時重複讀檔。 */
 let cachedPanelHtmlTemplate: string | undefined;
@@ -123,8 +129,25 @@ async function ensureMustCallCheckMessagesRuleMdc(
 		// ignore
 	}
 
+	const bundled = path.join(
+		context.extensionPath,
+		".cursor",
+		"rules",
+		"must-call-check-messages.mdc"
+	);
+	let body: string;
+	try {
+		body = readFileSync(bundled, "utf-8");
+	} catch {
+		console.error(
+			"[mcp-cursor-message] 找不到擴充套件內建規則檔：",
+			bundled
+		);
+		return;
+	}
+
 	await fs.mkdir(path.dirname(dest), { recursive: true });
-	await fs.writeFile(dest, MUST_CALL_CHECK_MESSAGES_RULE_MDC, "utf-8");
+	await fs.writeFile(dest, body, "utf-8");
 }
 
 /**
@@ -185,6 +208,10 @@ async function rebindMessengerDataDir(context: vscode.ExtensionContext): Promise
 	const next = messengerDataDirForContext(context);
 	if (next === dataDir) return;
 	dataDir = next;
+	const wfRebind = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (wfRebind) {
+		await mergeEverythingClaudeCodeIfEnabled(context, wfRebind);
+	}
 	await ensureMustCallCheckMessagesRuleMdc(context);
 	// 若首次進入某工作區且其 messenger-data 為空，先嘗試搬移 globalStorage 的過往內容。
 	await migrateGlobalMessengerDataToWorkspaceIfEmpty(context, dataDir);
@@ -218,6 +245,10 @@ function autoInstallMcpIfWorkspace(context: vscode.ExtensionContext): void {
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	extensionContext = context;
 	dataDir = messengerDataDirForContext(context);
+	const wfActivate = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (wfActivate) {
+		await mergeEverythingClaudeCodeIfEnabled(context, wfActivate);
+	}
 	await ensureMustCallCheckMessagesRuleMdc(context);
 	// 首次打開工作區時：把 globalStorage 內的過往資料遷移到 workspace 目錄，避免「找不到可複製過去內容」。
 	await migrateGlobalMessengerDataToWorkspaceIfEmpty(context, dataDir);
@@ -295,11 +326,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		})
 	);
 
-	// 使用者變更 `mcpMessenger.uiLanguage` 時同步側欄文案／語系。
+	// 使用者變更 `mcpMessenger.uiLanguage` 時同步側欄文案／語系；開啟 ECC 種子合併時立即套用。
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((e) => {
 			if (e.affectsConfiguration("mcpMessenger.uiLanguage")) {
 				schedulePushState();
+			}
+			if (e.affectsConfiguration("mcpMessenger.mergeEverythingClaudeCode.enabled")) {
+				const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+				if (root) void mergeEverythingClaudeCodeIfEnabled(context, root);
 			}
 		})
 	);

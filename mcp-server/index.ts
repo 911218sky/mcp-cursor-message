@@ -28,7 +28,6 @@ const QUESTION_FILE = path.join(DATA_DIR, "question.json");
 const ANSWER_FILE = path.join(DATA_DIR, "answer.json");
 const REPLY_FILE = path.join(DATA_DIR, "reply.json");
 const LOG_FILE = path.join(DATA_DIR, "server.log");
-/** `server.log` 上限（位元組）；超過則自尾端保留至多此大小。 */
 const MAX_SERVER_LOG_BYTES = 1024 * 1024;
 
 /**
@@ -75,18 +74,6 @@ const questionItemSchema = z.object({
 	options: z.array(questionOptionSchema).optional().default([]).describe("選項列表"),
 	allow_multiple: z.boolean().default(false).describe("是否允許多選"),
 });
-
-/**
- * 某些 MCP 客戶端會把輸入包成 `{ arguments: {...} }`。
- * 這裡做相容解包，避免 reply/progress/questions 被包一層而讀不到。
- */
-function unwrapToolInput<T extends Record<string, unknown>>(raw: unknown): Partial<T> {
-	if (!raw || typeof raw !== "object") return {};
-	const record = raw as Record<string, unknown>;
-	const nested = record.arguments;
-	if (!nested || typeof nested !== "object") return record as Partial<T>;
-	return { ...(record as Partial<T>), ...(nested as Partial<T>) };
-}
 
 // --- 佇列與訊息轉換 -------------------------------------------------------
 
@@ -375,8 +362,8 @@ function registerCheckMessages(server: McpServer): void {
 					.describe("本輪完整回覆內容（支援 Markdown），將推送到外掛介面展示給使用者"),
 			},
 		},
-		async (rawInput, extra) => {
-			const { reply } = unwrapToolInput<typeof rawInput>(rawInput);
+		async (args, extra) => {
+			const { reply } = args;
 			await ensureDataDir();
 			await appendServerLog("info", "check_messages started");
 
@@ -478,8 +465,8 @@ function registerSendProgress(server: McpServer): void {
 					.describe("進度摘要（支援 Markdown），將推送到外掛側欄"),
 			},
 		},
-		async (rawInput) => {
-			const { progress } = unwrapToolInput<typeof rawInput>(rawInput);
+		async (args) => {
+			const { progress } = args;
 			if (!progress) {
 				return {
 					content: [
@@ -526,15 +513,15 @@ function registerAskQuestion(server: McpServer): void {
 		"ask_question",
 		{
 			description:
-				"向使用者提出一個或多個問題並等待回答。支援單選／多選及自訂輸入。此工具會持續等待直到使用者回答。",
+				"向使用者提出一個或多個問題並等待回答。當需求模糊、有多種可行做法、或遇到複雜問題需要使用者選方案／補充資訊時，應主動使用本工具。支援單選／多選及自訂輸入；此工具會阻塞直到使用者在側欄作答。",
 			inputSchema: {
 				questions: z
 					.array(questionItemSchema)
 					.describe("問題列表，可同時提出多題"),
 			},
 		},
-		async (rawInput, extra) => {
-			const { questions } = unwrapToolInput<typeof rawInput>(rawInput);
+		async (args, extra) => {
+			const { questions } = args;
 			if (!questions || questions.length === 0) {
 				return {
 					content: [
