@@ -309,14 +309,14 @@ function renderQuestion(q: QuestionPayload | null): void {
 			.join("");
 		return `<div class="q-block" data-qid="${esc(qi.id)}"><div class="q-text">${esc(qi.question)}</div><div class="q-options">${optionsHtml}</div><input class="q-other" data-qid="${esc(qi.id)}" placeholder="${esc(tr.qOtherPlaceholder)}"></div>`;
 	});
-	const actionsHtml = `<div class="q-actions"><button type="button" class="btn btn-danger btn-sm" id="btnCancelQ">${esc(tr.qCancel)}</button><button type="button" class="btn btn-warn btn-sm" id="btnSubmitQ">${esc(tr.qSubmit)}</button></div>`;
+	const actionsHtml = `<div class="q-actions"><button type="button" class="btn btn-ghost btn-sm q-actions-skip" id="btnSkipQ">${esc(tr.qSkip)}</button><button type="button" class="btn btn-warn btn-sm" id="btnSubmitQ">${esc(tr.qSubmit)}</button></div>`;
 	questionBody.innerHTML = blocks.join("") + actionsHtml;
 	questionCard.classList.remove("hidden");
 
 	questionBody.querySelectorAll(".q-opt").forEach((el) => {
 		el.addEventListener("click", () => toggleOpt(el as HTMLElement));
 	});
-	$("btnCancelQ").addEventListener("click", cancelQ);
+	$("btnSkipQ").addEventListener("click", cancelQ);
 	$("btnSubmitQ").addEventListener("click", submitQ);
 	questionCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -362,7 +362,7 @@ function submitQ(): void {
 	optimisticHiddenAt = Date.now();
 }
 
-/** 使用者取消作答：送空答案讓 MCP 端可結束等待（行為與擴充約定一致）。 */
+/** 使用者跳過或關閉問答（Esc／遮罩）：送空答案讓 MCP 端可結束等待。 */
 function cancelQ(): void {
 	const dismissedId = curQuestion?.id ?? null;
 	vscode.postMessage({ type: "cancelQuestion" });

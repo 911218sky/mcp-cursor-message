@@ -46,7 +46,8 @@ export type UiStrings = {
 	btnSend: string;
 	placeholderInput: string;
 	qOtherPlaceholder: string;
-	qCancel: string;
+	/** 不作答而結束問答（寫入空答案，等同舊版「取消」） */
+	qSkip: string;
 	qSubmit: string;
 	removeQueue: string;
 	editQueue: string;
@@ -125,7 +126,7 @@ export const UI: Record<UiLocale, UiStrings> = {
 		btnSend: "送出",
 		placeholderInput: "輸入訊息…",
 		qOtherPlaceholder: "補充說明（可選）",
-		qCancel: "取消",
+		qSkip: "跳過",
 		qSubmit: "提交回答",
 		removeQueue: "撤銷",
 		editQueue: "編輯",
@@ -201,7 +202,7 @@ export const UI: Record<UiLocale, UiStrings> = {
 		btnSend: "Send",
 		placeholderInput: "Type a message…",
 		qOtherPlaceholder: "Optional note",
-		qCancel: "Cancel",
+		qSkip: "Skip",
 		qSubmit: "Submit",
 		removeQueue: "Remove",
 		editQueue: "Edit",

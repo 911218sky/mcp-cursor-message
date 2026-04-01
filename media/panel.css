@@ -697,8 +697,82 @@ body.app[data-font-size="lg"] {
 	border-left: 3px solid color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 58%, transparent);
 }
 
-.question-dialog-card {
-	border-left: 3px solid color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 58%, transparent);
+/* 問答專用遮罩：略深 + 較清楚的前後景分離 */
+#questionCard.settings-dialog {
+	background: color-mix(in srgb, var(--vscode-widget-shadow, #0a0a14) 52%, transparent);
+	backdrop-filter: blur(5px) saturate(1.08);
+	-webkit-backdrop-filter: blur(5px) saturate(1.08);
+}
+
+.settings-card.question-dialog-card {
+	width: min(532px, calc(100vw - 24px));
+	padding: 16px 17px 14px;
+	border-radius: var(--mcp-radius-lg);
+	border: 1px solid color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 32%, var(--mcp-border-soft));
+	border-left: 3px solid color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 62%, transparent);
+	background:
+		linear-gradient(
+			168deg,
+			color-mix(in srgb, var(--mcp-surface-1) 100%, transparent) 0%,
+			color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 9%, var(--mcp-surface-1)) 118%
+		);
+	box-shadow:
+		var(--mcp-shadow-lg),
+		0 0 0 1px color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 10%, transparent) inset;
+	gap: 14px;
+	/* 多題或長選項時避免超出視窗 */
+	max-height: min(90vh, calc(100vh - 24px));
+	overflow: hidden;
+}
+
+.question-dialog-card > .card-head {
+	flex-shrink: 0;
+	margin-bottom: 2px;
+	align-items: flex-start;
+	gap: 11px;
+}
+
+.question-dialog-card .card-icon--q {
+	width: 34px;
+	height: 34px;
+	border-radius: 11px;
+	box-shadow: var(--mcp-shadow-sm);
+}
+
+.question-dialog-card .card-icon--q::after {
+	content: "?";
+	display: grid;
+	place-items: center;
+	width: 100%;
+	height: 100%;
+	font-size: 15px;
+	font-weight: 800;
+	line-height: 1;
+	color: color-mix(in srgb, var(--vscode-charts-purple, #c4b5fd) 92%, var(--vscode-foreground));
+}
+
+.question-dialog-card .card-head .card-title {
+	font-size: 14px;
+	font-weight: 750;
+	letter-spacing: -0.03em;
+	text-transform: none;
+	color: var(--vscode-foreground);
+	opacity: 1;
+	line-height: 1.35;
+}
+
+#questionBody {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scroll-padding-bottom: 10px;
+	padding-right: 2px;
+	margin-right: -2px;
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in srgb, var(--vscode-scrollbarSlider-background, #555) 70%, transparent)
+		color-mix(in srgb, var(--mcp-surface-1) 40%, transparent);
 }
 
 .card--queue {
@@ -1316,17 +1390,18 @@ body.app[data-font-size="lg"] {
 	text-align: center;
 }
 
-/* —— 問答區 —— */
+/* —— 問答區（僅問答對話框使用） —— */
 .q-block {
-	margin-bottom: 14px;
-	padding: 10px 12px 12px;
-	border-radius: var(--mcp-radius);
-	border: 1px solid color-mix(in srgb, var(--mcp-border) 55%, transparent);
+	margin-bottom: 16px;
+	padding: 14px 14px 15px;
+	border-radius: var(--mcp-radius-lg);
+	border: 1px solid color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 20%, var(--mcp-border));
 	background: color-mix(
 		in srgb,
-		var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.05)) 60%,
-		transparent
+		var(--mcp-surface-elevated) 82%,
+		var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.06))
 	);
+	box-shadow: var(--mcp-shadow-sm);
 }
 
 .q-block:last-of-type {
@@ -1334,46 +1409,75 @@ body.app[data-font-size="lg"] {
 }
 
 .q-text {
-	font-weight: 650;
-	margin-bottom: 8px;
-	line-height: 1.45;
+	font-weight: 640;
+	margin-bottom: 11px;
+	line-height: 1.52;
 	font-size: 13px;
+	letter-spacing: -0.02em;
 	color: var(--vscode-foreground);
 }
 
 .q-options {
 	display: flex;
 	flex-direction: column;
-	gap: 7px;
+	gap: 8px;
 }
 
 .q-opt {
 	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 9px 11px;
+	align-items: flex-start;
+	gap: 11px;
+	padding: 11px 13px 11px 12px;
 	border: 1px solid var(--mcp-border-soft);
-	border-radius: var(--mcp-radius);
+	border-radius: var(--mcp-radius-sm);
 	cursor: pointer;
-	font-size: 12px;
+	font-size: 12.5px;
+	line-height: 1.45;
 	transition:
-		background 0.14s ease,
-		border-color 0.14s ease;
+		background 0.16s var(--mcp-ease-soft),
+		border-color 0.16s var(--mcp-ease-soft),
+		box-shadow 0.16s var(--mcp-ease-soft),
+		transform 0.1s var(--mcp-ease-out);
+	box-shadow: 0 1px 0 color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
 }
 
 .q-opt:hover {
-	background: var(--vscode-list-hoverBackground, rgba(139, 124, 248, 0.08));
-	border-color: color-mix(in srgb, var(--vscode-focusBorder, #8b7cf8) 45%, var(--mcp-border));
+	background: color-mix(
+		in srgb,
+		var(--vscode-list-hoverBackground, rgba(139, 124, 248, 0.09)) 100%,
+		var(--mcp-surface-2)
+	);
+	border-color: color-mix(in srgb, var(--vscode-focusBorder, #8b7cf8) 40%, var(--mcp-border));
+	box-shadow:
+		0 1px 0 color-mix(in srgb, var(--vscode-foreground) 5%, transparent),
+		0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder, #8b7cf8) 18%, transparent);
+}
+
+.q-opt:active {
+	transform: scale(0.992);
+}
+
+.q-opt:focus-visible {
+	outline: 2px solid var(--vscode-focusBorder, #8b7cf8);
+	outline-offset: 2px;
 }
 
 .q-opt.selected {
-	border-color: var(--vscode-focusBorder, #8b7cf8);
-	background: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, rgba(139, 124, 248, 0.18)) 100%, transparent);
+	border-color: color-mix(in srgb, var(--vscode-focusBorder, #8b7cf8) 72%, var(--mcp-border));
+	background: color-mix(
+		in srgb,
+		var(--vscode-list-activeSelectionBackground, rgba(139, 124, 248, 0.22)) 100%,
+		var(--mcp-surface-1)
+	);
+	box-shadow:
+		0 1px 0 color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 22%, transparent),
+		0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder, #8b7cf8) 28%, transparent);
 }
 
 .q-opt .check {
-	width: 15px;
-	height: 15px;
+	width: 16px;
+	height: 16px;
+	margin-top: 2px;
 	border: 2px solid var(--mcp-border);
 	border-radius: 50%;
 	flex-shrink: 0;
@@ -1397,7 +1501,7 @@ body.app[data-font-size="lg"] {
 }
 
 .q-opt.multi .check {
-	border-radius: 5px;
+	border-radius: 6px;
 }
 
 .q-opt.selected .check {
@@ -1411,14 +1515,17 @@ body.app[data-font-size="lg"] {
 
 .q-other {
 	width: 100%;
-	margin-top: 6px;
-	padding: 7px 11px;
+	margin-top: 9px;
+	padding: 9px 12px;
 	border: 1px solid var(--vscode-input-border, var(--mcp-border));
-	border-radius: var(--mcp-radius);
+	border-radius: var(--mcp-radius-sm);
 	background: var(--vscode-input-background, rgba(255, 255, 255, 0.04));
 	color: var(--vscode-input-foreground);
 	font-size: 12px;
 	font-family: inherit;
+	transition:
+		border-color 0.14s var(--mcp-ease-soft),
+		box-shadow 0.14s var(--mcp-ease-soft);
 }
 
 .q-other::placeholder {
@@ -1433,11 +1540,33 @@ body.app[data-font-size="lg"] {
 
 .q-actions {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 10px;
+	align-items: center;
 	justify-content: flex-end;
-	margin-top: 12px;
-	padding-top: 10px;
-	border-top: 1px solid var(--mcp-border-soft);
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px solid color-mix(in srgb, var(--vscode-charts-purple, #a78bfa) 15%, var(--mcp-border-soft));
+}
+
+.q-actions-skip {
+	margin-right: auto;
+}
+
+/* 問答對話框內：長題目捲動時仍易於操作按鈕 */
+.question-dialog-card #questionBody .q-actions {
+	position: sticky;
+	bottom: 0;
+	margin-top: 16px;
+	padding-top: 14px;
+	padding-bottom: 2px;
+	background: linear-gradient(
+		180deg,
+		color-mix(in srgb, var(--mcp-surface-1) 0%, transparent) 0%,
+		color-mix(in srgb, var(--mcp-surface-1) 94%, transparent) 28%,
+		var(--mcp-surface-1) 100%
+	);
+	box-shadow: 0 -12px 22px -14px color-mix(in srgb, var(--vscode-widget-shadow, #000) 42%, transparent);
 }
 
 .btn-warn {
@@ -1501,4 +1630,12 @@ body.app[data-font-size="lg"] {
 	padding: 6px 12px;
 	font-size: 11px;
 	border-radius: var(--mcp-radius-sm);
+}
+
+.question-dialog-card .q-actions .btn-sm {
+	min-height: 34px;
+	padding: 7px 16px;
+	font-size: 12px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
 }
