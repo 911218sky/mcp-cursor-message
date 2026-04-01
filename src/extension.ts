@@ -94,7 +94,9 @@ const BUNDLED_CURSOR_RULE_FILES = [
 ] as const;
 
 /**
- * 若工作區缺少內建規則檔，則在啟用/切換工作區時各補一份。
+ * 若工作區缺少內建規則檔，則在啟用/切換工作區時各補一份（已存在則不覆寫）。
+ * 於 `activate` 與 `rebindMessengerDataDir` 呼叫，確保初始化當下即補齊。
+ * 來源順序：`工作區/src/rules` → `extensionPath/src/rules` → `extensionPath/.cursor/rules`（VSIX 內由 compile 自 src 同步）。
  * `must-call-check-messages.mdc`：側欄佇列與 `check_messages` 串接。
  * `three-phase-workflow.mdc`：分析→方案→實作之三階段工作流。
  * `code-review-agents.mdc`：建置檢查與 code review subagent 委派指引。
@@ -112,17 +114,18 @@ async function ensureBundledCursorRules(
 			await fs.stat(dest);
 			continue;
 		} catch {
-			// missing → copy from extension bundle
+			// missing → 依序從工作區 src、擴充套件 bundle 補上
 		}
 
-		const bundled = path.join(context.extensionPath, ".cursor", "rules", name);
-		let body: string;
-		try {
-			body = readFileSync(bundled, "utf-8");
-		} catch {
+		const body = readBundledCursorRuleSync(
+			wf,
+			context.extensionPath,
+			name
+		);
+		if (body === undefined) {
 			console.error(
 				"[mcp-cursor-message] 找不到擴充套件內建規則檔：",
-				bundled
+				name
 			);
 			continue;
 		}
@@ -130,6 +133,28 @@ async function ensureBundledCursorRules(
 		await fs.mkdir(rulesDir, { recursive: true });
 		await fs.writeFile(dest, body, "utf-8");
 	}
+}
+
+/**
+ * 讀取要寫入工作區 `.cursor/rules/` 的規則內文（不覆寫已存在的目標檔，僅供缺失時）。
+ */
+function readBundledCursorRuleSync(
+	workspaceRoot: string,
+	extensionPath: string,
+	name: string
+): string | undefined {
+	const tryRead = (abs: string): string | undefined => {
+		try {
+			return readFileSync(abs, "utf-8");
+		} catch {
+			return undefined;
+		}
+	};
+	return (
+		tryRead(path.join(workspaceRoot, "src", "rules", name)) ??
+		tryRead(path.join(extensionPath, "src", "rules", name)) ??
+		tryRead(path.join(extensionPath, ".cursor", "rules", name))
+	);
 }
 
 /**

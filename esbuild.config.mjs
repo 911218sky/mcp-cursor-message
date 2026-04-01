@@ -1,4 +1,6 @@
 // @ts-check
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import * as esbuild from "esbuild";
 
 const minifyShared = {
@@ -51,3 +53,21 @@ if (!batch) {
 
 const builds = Array.isArray(batch) ? batch : [batch];
 await Promise.all(builds.map((opts) => esbuild.build(opts)));
+
+/** 將 `src/rules/*.mdc` 同步到 `.cursor/rules/`，供 VSIX 打包與執行時讀取（與 extension 的來源順序一致）。 */
+async function copySrcRulesToCursorRules() {
+	const srcDir = path.join(process.cwd(), "src", "rules");
+	const destDir = path.join(process.cwd(), ".cursor", "rules");
+	let entries;
+	try {
+		entries = await fs.readdir(srcDir);
+	} catch {
+		return;
+	}
+	await fs.mkdir(destDir, { recursive: true });
+	for (const f of entries) {
+		if (!f.endsWith(".mdc")) continue;
+		await fs.copyFile(path.join(srcDir, f), path.join(destDir, f));
+	}
+}
+await copySrcRulesToCursorRules();
