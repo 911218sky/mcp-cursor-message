@@ -722,7 +722,7 @@ body.app[data-font-size="lg"] {
 	gap: 14px;
 	/* 多題或長選項時避免超出視窗 */
 	max-height: min(90vh, calc(100vh - 24px));
-	overflow: hidden;
+	overflow: visible;
 }
 
 .question-dialog-card > .card-head {
@@ -769,6 +769,7 @@ body.app[data-font-size="lg"] {
 	overscroll-behavior: contain;
 	scroll-padding-bottom: 10px;
 	padding-right: 2px;
+	padding-bottom: 6px;
 	margin-right: -2px;
 	scrollbar-width: thin;
 	scrollbar-color: color-mix(in srgb, var(--vscode-scrollbarSlider-background, #555) 70%, transparent)
@@ -1559,7 +1560,7 @@ body.app[data-font-size="lg"] {
 	bottom: 0;
 	margin-top: 16px;
 	padding-top: 14px;
-	padding-bottom: 2px;
+	padding-bottom: 8px;
 	background: linear-gradient(
 		180deg,
 		color-mix(in srgb, var(--mcp-surface-1) 0%, transparent) 0%,
