@@ -78,11 +78,6 @@
 					"default": "en",
 					"description": "Sidebar Webview UI language. Default English; auto follows the editor display language."
 				},
-				"mcpMessenger.mergeEverythingClaudeCode.enabled": {
-					"type": "boolean",
-					"default": true,
-					"description": "When true (default), merge bundled/workspace everything-claude-code `.cursor` seeds into the workspace `.cursor` on startup, workspace folder change, or when this setting is turned on. Set false to skip merging."
-				},
 				"mcpMessenger.updateCheck.enabled": {
 					"type": "boolean",
 					"default": true,

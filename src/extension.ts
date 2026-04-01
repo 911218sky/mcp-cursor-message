@@ -33,30 +33,6 @@ import {
 	subtractTokensForQueueMessage,
 } from "./token-stats";
 import { runUpdateCheck, scheduleUpdateChecks } from "./update-check";
-import { mergeEverythingClaudeCodeCursor } from "./merge-claude-code-cursor";
-
-const CFG_MERGE_ECC = "mergeEverythingClaudeCode.enabled";
-
-function isMergeEverythingClaudeCodeEnabled(): boolean {
-	return (
-		vscode.workspace.getConfiguration("mcpMessenger").get<boolean>(CFG_MERGE_ECC) ===
-		true
-	);
-}
-
-/** 設定開啟時，將 everything-claude-code 的 `.cursor` 種子合併進工作區（不覆寫既有檔案）。 */
-async function mergeEverythingClaudeCodeIfEnabled(
-	context: vscode.ExtensionContext,
-	workspaceRoot: string
-): Promise<void> {
-	if (!isMergeEverythingClaudeCodeEnabled()) return;
-	const extVer = String(context.extension.packageJSON?.version ?? "").trim();
-	await mergeEverythingClaudeCodeCursor(
-		workspaceRoot,
-		context.extensionPath,
-		extVer || undefined
-	);
-}
 
 /** 目前 IPC 根目錄（工作區或 globalStorage 下的 messenger-data）。 */
 let dataDir: string = "";
@@ -110,44 +86,48 @@ function messengerDataDirForContext(context: vscode.ExtensionContext): string {
 	return path.join(context.globalStorageUri.fsPath, "messenger-data");
 }
 
+/** 擴充套件內建、可自動補進工作區 `.cursor/rules/` 的規則檔（已存在則不覆寫）。 */
+const BUNDLED_CURSOR_RULE_FILES = [
+	"must-call-check-messages.mdc",
+	"code-review-agents.mdc",
+] as const;
+
 /**
- * 若工作區沒有 `./.cursor/rules/must-call-check-messages.mdc`，則在啟用/切換工作區時自動補齊一份。
- * 目的：避免使用者的環境缺失此規則後，側欄佇列串接行為中斷。
+ * 若工作區缺少內建規則檔，則在啟用/切換工作區時各補一份。
+ * `must-call-check-messages.mdc`：側欄佇列與 `check_messages` 串接。
+ * `code-review-agents.mdc`：建置檢查與 code review subagent 委派指引。
  */
-async function ensureMustCallCheckMessagesRuleMdc(
+async function ensureBundledCursorRules(
 	context: vscode.ExtensionContext
 ): Promise<void> {
 	const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 	if (!wf) return;
 
-	// 規則檔固定放在：工作區 `.cursor/rules/must-call-check-messages.mdc`
-	const dest = path.join(wf, ".cursor", "rules", "must-call-check-messages.mdc");
-	try {
-		await fs.stat(dest);
-		return; // 已存在就不覆寫（避免干擾使用者自訂規則）
-	} catch {
-		// ignore
-	}
+	const rulesDir = path.join(wf, ".cursor", "rules");
+	for (const name of BUNDLED_CURSOR_RULE_FILES) {
+		const dest = path.join(rulesDir, name);
+		try {
+			await fs.stat(dest);
+			continue;
+		} catch {
+			// missing → copy from extension bundle
+		}
 
-	const bundled = path.join(
-		context.extensionPath,
-		".cursor",
-		"rules",
-		"must-call-check-messages.mdc"
-	);
-	let body: string;
-	try {
-		body = readFileSync(bundled, "utf-8");
-	} catch {
-		console.error(
-			"[mcp-cursor-message] 找不到擴充套件內建規則檔：",
-			bundled
-		);
-		return;
-	}
+		const bundled = path.join(context.extensionPath, ".cursor", "rules", name);
+		let body: string;
+		try {
+			body = readFileSync(bundled, "utf-8");
+		} catch {
+			console.error(
+				"[mcp-cursor-message] 找不到擴充套件內建規則檔：",
+				bundled
+			);
+			continue;
+		}
 
-	await fs.mkdir(path.dirname(dest), { recursive: true });
-	await fs.writeFile(dest, body, "utf-8");
+		await fs.mkdir(rulesDir, { recursive: true });
+		await fs.writeFile(dest, body, "utf-8");
+	}
 }
 
 /**
@@ -208,11 +188,7 @@ async function rebindMessengerDataDir(context: vscode.ExtensionContext): Promise
 	const next = messengerDataDirForContext(context);
 	if (next === dataDir) return;
 	dataDir = next;
-	const wfRebind = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (wfRebind) {
-		await mergeEverythingClaudeCodeIfEnabled(context, wfRebind);
-	}
-	await ensureMustCallCheckMessagesRuleMdc(context);
+	await ensureBundledCursorRules(context);
 	// 若首次進入某工作區且其 messenger-data 為空，先嘗試搬移 globalStorage 的過往內容。
 	await migrateGlobalMessengerDataToWorkspaceIfEmpty(context, dataDir);
 	// 新路徑首次寫入前先建立目錄。
@@ -245,11 +221,7 @@ function autoInstallMcpIfWorkspace(context: vscode.ExtensionContext): void {
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	extensionContext = context;
 	dataDir = messengerDataDirForContext(context);
-	const wfActivate = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (wfActivate) {
-		await mergeEverythingClaudeCodeIfEnabled(context, wfActivate);
-	}
-	await ensureMustCallCheckMessagesRuleMdc(context);
+	await ensureBundledCursorRules(context);
 	// 首次打開工作區時：把 globalStorage 內的過往資料遷移到 workspace 目錄，避免「找不到可複製過去內容」。
 	await migrateGlobalMessengerDataToWorkspaceIfEmpty(context, dataDir);
 	await ensureDataDir(dataDir);
@@ -326,15 +298,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		})
 	);
 
-	// 使用者變更 `mcpMessenger.uiLanguage` 時同步側欄文案／語系；開啟 ECC 種子合併時立即套用。
+	// 使用者變更 `mcpMessenger.uiLanguage` 時同步側欄文案／語系。
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((e) => {
 			if (e.affectsConfiguration("mcpMessenger.uiLanguage")) {
 				schedulePushState();
-			}
-			if (e.affectsConfiguration("mcpMessenger.mergeEverythingClaudeCode.enabled")) {
-				const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-				if (root) void mergeEverythingClaudeCodeIfEnabled(context, root);
 			}
 		})
 	);

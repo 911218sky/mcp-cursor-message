@@ -1,11 +1,9 @@
 PROJECT.md
 INSTALL.md
-everything-claude-code/**
-!everything-claude-code/.cursor/
-!everything-claude-code/.cursor/**
 .cursor/**
 !.cursor/rules/
 !.cursor/rules/must-call-check-messages.mdc
+!.cursor/rules/code-review-agents.mdc
 .github/**
 bun.lock
 node_modules/**

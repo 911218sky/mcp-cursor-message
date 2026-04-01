@@ -88,7 +88,6 @@ bun run package
 | 設定鍵 | 類型 | 預設值 | 說明 |
 |--------|------|--------|------|
 | `mcpMessenger.uiLanguage` | `en`／`zh`／`auto` | `en` | 側欄 Webview 介面語言；**`auto`** 會依編輯器介面語系決定（非英文介面時傾向中文）。 |
-| `mcpMessenger.mergeEverythingClaudeCode.enabled` | 布林 | `true` | **`true`**（預設）時會把內建或工作區 **`everything-claude-code/.cursor`** 種子合併進 **`<工作區>/.cursor`**（僅補缺檔、不覆寫既有檔）；於啟動、切換資料夾或開啟此設定時執行。設 **`false`** 可完全關閉合併。 |
 | `mcpMessenger.updateCheck.enabled` | 布林 | `true` | **`false`** 時完全不執行更新檢查（含命令面板手動檢查），也不會向 GitHub 發請求。 |
 | `mcpMessenger.updateCheck.intervalHours` | 數字（≥ 1） | `12` | 背景自動檢查的間隔（小時）。 |
 | `mcpMessenger.updateCheck.startupDelaySeconds` | 數字（≥ 0） | `15` | 啟動後延遲幾秒再做**第一次**檢查；設 **`0`** 表示啟動後立即檢查。 |
