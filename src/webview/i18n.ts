@@ -74,6 +74,9 @@ export type UiStrings = {
 	settingsButton: string;
 	settingsTitle: string;
 	settingsClose: string;
+	enabledLabel: string;
+	enabledOn: string;
+	enabledOff: string;
 	replyDefaultLabel: string;
 	replyDefaultShow: string;
 	replyDefaultHide: string;
@@ -153,6 +156,9 @@ export const UI: Record<UiLocale, UiStrings> = {
 		settingsButton: "設定",
 		settingsTitle: "設定",
 		settingsClose: "關閉",
+		enabledLabel: "啟用",
+		enabledOn: "開",
+		enabledOff: "關",
 		replyDefaultLabel: "回覆卡",
 		replyDefaultShow: "預設顯示",
 		replyDefaultHide: "預設隱藏",
@@ -229,6 +235,9 @@ export const UI: Record<UiLocale, UiStrings> = {
 		settingsButton: "Settings",
 		settingsTitle: "Settings",
 		settingsClose: "Close",
+		enabledLabel: "Enabled",
+		enabledOn: "On",
+		enabledOff: "Off",
 		replyDefaultLabel: "Reply card",
 		replyDefaultShow: "Default show",
 		replyDefaultHide: "Default hide",

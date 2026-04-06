@@ -53,6 +53,14 @@
 		},
 		"commands": [
 			{
+				"command": "mcpMessenger.enable",
+				"title": "mcp-cursor-message: Enable"
+			},
+			{
+				"command": "mcpMessenger.disable",
+				"title": "mcp-cursor-message: Disable (and clean up)"
+			},
+			{
 				"command": "mcpMessenger.setupMcp",
 				"title": "mcp-cursor-message: Install MCP configuration"
 			},
@@ -68,6 +76,11 @@
 		"configuration": {
 			"title": "MCP chat",
 			"properties": {
+				"mcpMessenger.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable the MCP chat sidebar + file-based IPC. When disabled, the extension stops watching IPC files and cleans up files created by the extension (messenger-data, bundled cursor rules, and this extension's MCP entry in .cursor/mcp.json)."
+				},
 				"mcpMessenger.uiLanguage": {
 					"type": "string",
 					"enum": [

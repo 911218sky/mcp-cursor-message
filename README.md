@@ -52,6 +52,8 @@ Open the **Command Palette** (*View → Command Palette*, or `Ctrl+Shift+P` on W
 
 | Command ID | Title | What it does |
 |------------|-------|----------------|
+| `mcpMessenger.enable` | **mcp-cursor-message: Enable** | Turns the extension features back on (IPC watcher + sidebar actions). |
+| `mcpMessenger.disable` | **mcp-cursor-message: Disable (and clean up)** | Disables the extension features and cleans up files created by the extension (see `mcpMessenger.enabled`). |
 | `mcpMessenger.setupMcp` | **mcp-cursor-message: Install MCP configuration** | Writes/merges `.cursor/mcp.json` in the workspace, registers the MCP server, and sets `MESSENGER_DATA_DIR` to match the sidebar data folder. Requires a **folder** workspace. |
 | `mcpMessenger.removeMcp` | **mcp-cursor-message: Remove MCP configuration** | Removes this extension’s MCP entry from `.cursor/mcp.json` (does not delete the whole file). |
 | `mcpMessenger.checkForUpdates` | **mcp-cursor-message: Check for updates (GitHub)** | Manually checks GitHub Releases for a newer VSIX (honors `mcpMessenger.updateCheck.*` settings). |
@@ -78,6 +80,7 @@ All keys live under the **`mcpMessenger`** prefix. In the editor: **Settings** �
 
 | Setting | Type | Default | What it does |
 |---------|------|---------|----------------|
+| `mcpMessenger.enabled` | boolean | `true` | Master switch for the sidebar + IPC. When set to **false**, the extension stops watching IPC files and **cleans up** files created by the extension: `<workspace>/.cursor/messenger-data/*` (including `paste/`), `<workspace>/.cursor/rules/{must-call-check-messages.mdc, three-phase-workflow.mdc}`, and this extension’s entry in `<workspace>/.cursor/mcp.json`. |
 | `mcpMessenger.uiLanguage` | `en` \| `zh` \| `auto` | `en` | Sidebar Webview language. **`auto`** follows the editor UI language (non-English → Chinese UI). |
 | `mcpMessenger.updateCheck.enabled` | boolean | `true` | When **`false`**, no update checks run (background or Command Palette), and no GitHub requests. |
 | `mcpMessenger.updateCheck.intervalHours` | number (≥ 1) | `12` | Hours between automatic update checks. |

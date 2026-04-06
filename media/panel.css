@@ -238,6 +238,31 @@ body.app[data-font-size="lg"] {
 	outline-offset: 1px;
 }
 
+.topbar-toggle-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 7px;
+	border-radius: var(--mcp-radius-sm);
+	border: 1px solid var(--mcp-border-soft);
+	background: var(--mcp-surface-1);
+}
+
+.topbar-toggle-input {
+	width: 14px;
+	height: 14px;
+	margin: 0;
+	accent-color: var(--mcp-accent);
+}
+
+.topbar-toggle-hint {
+	font-size: 11px;
+	font-weight: 600;
+	color: color-mix(in srgb, var(--vscode-foreground) 70%, transparent);
+	white-space: nowrap;
+}
+
 .topbar-brand {
 	display: flex;
 	align-items: flex-start;

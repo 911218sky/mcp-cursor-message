@@ -61,6 +61,8 @@ let uiLocale: UiLocale = DEFAULT_LOCALE;
 let lastQueue: unknown;
 /** 與 `mcpMessenger.uiLanguage` 同步（頂欄選單值）。 */
 let lastUiLanguageSetting: PanelUiLanguageSetting = "en";
+/** 與 `mcpMessenger.enabled` 同步（UI toggle + 行為門禁）。 */
+let lastEnabled = true;
 /** 輸入框內 Ctrl+V 暫存之圖片（按「送出」才進佇列；可複數張）。 */
 let pendingPastes: PendingPaste[] = [];
 let curQuestion: QuestionPayload | null = null;
@@ -109,11 +111,29 @@ function applyChrome(loc: UiLocale): void {
 	chromeSettingsBtn.textContent = t.settingsButton;
 	chromeSettingsTitle.textContent = t.settingsTitle;
 	btnCloseSettings.textContent = t.settingsClose;
+	chromeEnabledLabel.textContent = t.enabledLabel;
 	msgInput.placeholder = t.placeholderInput;
 	updateLanguageSelect(lastUiLanguageSetting);
 	updateFontSizeSelect(currentFontSize);
 	renderTokenStats(lastTokenStats);
 	renderAiRunStatus(lastQueue, lastSeenReplyContent);
+	updateEnabledToggle(lastEnabled);
+}
+
+function updateEnabledToggle(enabled: boolean): void {
+	lastEnabled = enabled;
+	enabledToggle.checked = enabled;
+	chromeEnabledHint.textContent = enabled ? S().enabledOn : S().enabledOff;
+
+	// Disabled mode is “read-only”: keep UI visible, but block actions that write IPC.
+	msgInput.disabled = !enabled;
+	sendBtn.disabled = !enabled || (!msgInput.value.trim() && pendingPastes.length === 0);
+	($("btnPickImage") as HTMLButtonElement).disabled = !enabled;
+	($("btnPickFile") as HTMLButtonElement).disabled = !enabled;
+
+	if (!enabled) {
+		clearPendingPaste();
+	}
 }
 
 /** 頂欄語言選單文案與目前設定值。 */
@@ -168,6 +188,7 @@ const fontSizeSelect = $("fontSizeSelect") as HTMLSelectElement;
 const btnOpenSettings = $("btnOpenSettings") as HTMLButtonElement;
 const settingsDialog = $("settingsDialog");
 const btnCloseSettings = $("btnCloseSettings") as HTMLButtonElement;
+const enabledToggle = $("enabledToggle") as HTMLInputElement;
 
 /** 靜態文案節點（由 applyChrome 依語系刷新）。 */
 const chromeTopbarTitle = $("chromeTopbarTitle");
@@ -185,6 +206,8 @@ const chromeLangLabel = $("chromeLangLabel");
 const chromeFontSizeLabel = $("chromeFontSizeLabel");
 const chromeSettingsBtn = $("chromeSettingsBtn");
 const chromeSettingsTitle = $("chromeSettingsTitle");
+const chromeEnabledLabel = $("chromeEnabledLabel");
+const chromeEnabledHint = $("chromeEnabledHint");
 let currentFontSize: FontSizeSetting = DEFAULT_FONT_SIZE;
 let lastTokenStats: PanelTokenStats | undefined;
 const FONT_SCALE_MAP: Record<FontSizeSetting, string> = {
@@ -683,19 +706,20 @@ window.addEventListener("message", (ev) => {
 	const raw = ev.data as { type?: string };
 	if (raw.type !== "state") return;
 	const m = raw as ExtensionPanelStateMessage;
-		const prevHistorySig = historyRenderSignature(historyEntries);
+	const prevHistorySig = historyRenderSignature(historyEntries);
 	const prevLastSeenReplyContent = lastSeenReplyContent;
-		const nextHistoryEntries = normalizeHistoryPayload(m.history ?? []);
-		const nextHistorySig = historyRenderSignature(nextHistoryEntries);
-		const historyChanged = prevHistorySig !== nextHistorySig;
-		let historyRenderedDuringMessage = false;
-		historyEntries = nextHistoryEntries;
+	const nextHistoryEntries = normalizeHistoryPayload(m.history ?? []);
+	const nextHistorySig = historyRenderSignature(nextHistoryEntries);
+	const historyChanged = prevHistorySig !== nextHistorySig;
+	let historyRenderedDuringMessage = false;
+	historyEntries = nextHistoryEntries;
 	if (historyEntries.length === 0) {
 		tryMigrateHistoryFromLocalStorage();
 	}
 	refreshLastSeenReplyFromHistory();
 	lastQueue = m.queue;
 	lastUiLanguageSetting = m.uiLanguageSetting;
+	lastEnabled = Boolean(m.enabled);
 	applyChrome(m.uiLocale);
 	renderQuestion((m.question as QuestionPayload | null) ?? null);
 	const incomingReply = (m.reply?.content ?? "").trim();
@@ -729,9 +753,9 @@ window.addEventListener("message", (ev) => {
 	renderQueuePreview(m.queue);
 	renderAiRunStatus(m.queue, incomingReply, incomingReplyKind);
 	renderTokenStats(m.tokenStats);
-		if (historyChanged && !historyRenderedDuringMessage) {
-			renderHistory();
-		}
+	if (historyChanged && !historyRenderedDuringMessage) {
+		renderHistory();
+	}
 });
 
 // 允許點擊問答遮罩背景與 `Esc` 也能取消（不會造成 XSS，僅觸發既有 cancelQ）。
@@ -772,7 +796,7 @@ function clearPendingPaste(): void {
 /** 依輸入或暫存貼圖，啟用或停用「送出」按鈕。 */
 function updateSend(): void {
 	const hasText = !!msgInput.value.trim();
-	sendBtn.disabled = !hasText && pendingPastes.length === 0;
+	sendBtn.disabled = !lastEnabled || (!hasText && pendingPastes.length === 0);
 }
 
 msgInput.addEventListener("input", updateSend);
@@ -895,6 +919,12 @@ btnCloseSettings.addEventListener("click", () => {
 
 settingsDialog.addEventListener("click", (ev) => {
 	if (ev.target === settingsDialog) settingsDialog.classList.add("hidden");
+});
+
+enabledToggle.addEventListener("change", () => {
+	const next = enabledToggle.checked;
+	updateEnabledToggle(next);
+	vscode.postMessage({ type: "setEnabled", value: next });
 });
 
 /** 佇列預覽列：事件委派至 `.qp-remove`，避免每次重繪佇列時重綁多顆按鈕。 */

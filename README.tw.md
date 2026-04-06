@@ -67,6 +67,8 @@ bun run package
 
 | 命令 ID | 命令面板顯示標題（原文，請複製或節录搜尋） | 說明 |
 |---------|---------------------------------------------|------|
+| `mcpMessenger.enable` | `mcp-cursor-message: Enable` | 重新開啟側欄 + IPC 監聽等主要功能。 |
+| `mcpMessenger.disable` | `mcp-cursor-message: Disable (and clean up)` | 關閉主要功能並清理此擴充建立的檔案（見 `mcpMessenger.enabled`）。 |
 | `mcpMessenger.setupMcp` | `mcp-cursor-message: Install MCP configuration` | 安裝／合併工作區 `.cursor/mcp.json`，註冊 MCP 與 `MESSENGER_DATA_DIR`。 |
 | `mcpMessenger.removeMcp` | `mcp-cursor-message: Remove MCP configuration` | 自 `mcp.json` 移除此擴充的 MCP 條目。 |
 | `mcpMessenger.checkForUpdates` | `mcp-cursor-message: Check for updates (GitHub)` | 手動檢查 GitHub 更新（受 `mcpMessenger.updateCheck.*` 設定影響）。 |
@@ -87,6 +89,7 @@ bun run package
 
 | 設定鍵 | 類型 | 預設值 | 說明 |
 |--------|------|--------|------|
+| `mcpMessenger.enabled` | 布林 | `true` | 主要開關。設為 **`false`** 時會停止監聽 IPC，並**清理**此擴充建立的檔案：`<工作區>/.cursor/messenger-data/*`（含 `paste/`）、`<工作區>/.cursor/rules/{must-call-check-messages.mdc, three-phase-workflow.mdc}`，以及 `<工作區>/.cursor/mcp.json` 內本擴充的 MCP 條目。 |
 | `mcpMessenger.uiLanguage` | `en`／`zh`／`auto` | `en` | 側欄 Webview 介面語言；**`auto`** 會依編輯器介面語系決定（非英文介面時傾向中文）。 |
 | `mcpMessenger.updateCheck.enabled` | 布林 | `true` | **`false`** 時完全不執行更新檢查（含命令面板手動檢查），也不會向 GitHub 發請求。 |
 | `mcpMessenger.updateCheck.intervalHours` | 數字（≥ 1） | `12` | 背景自動檢查的間隔（小時）。 |

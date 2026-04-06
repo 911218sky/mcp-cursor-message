@@ -14,6 +14,7 @@ export type PanelHistoryEntry = {
 export type WebviewHostMessage =
 	| { type: "ready" }
 	| { type: "setUiLanguage"; value?: string }
+	| { type: "setEnabled"; value: boolean }
 	| { type: "sendText"; text?: string }
 	| {
 			type: "sendComposer";
@@ -60,6 +61,7 @@ export type ExtensionPanelStateMessage = {
 	type: "state";
 	uiLocale: "en" | "zh";
 	uiLanguageSetting: PanelUiLanguageSetting;
+	enabled: boolean;
 	question: unknown;
 	reply: { content?: string; kind?: "progress" | "final" } | null;
 	queue: unknown;

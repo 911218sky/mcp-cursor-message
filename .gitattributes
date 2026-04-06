@@ -1,0 +1,7 @@
+* text=auto
+
+# Keep webview template stable across platforms.
+media/panel.html text eol=lf
+
+# This file itself should stay LF too.
+.gitattributes text eol=lf
