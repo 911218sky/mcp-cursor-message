@@ -194,6 +194,28 @@ body.app[data-font-size="lg"] {
 	min-width: 0;
 }
 
+.composer-attach .topbar-control--enabled {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 0 6px;
+	border-radius: var(--mcp-radius-sm);
+	border: 1px solid var(--mcp-border-soft);
+	background: color-mix(in srgb, var(--vscode-foreground) 4%, transparent);
+}
+
+.composer-attach .topbar-control--enabled .topbar-lang-label {
+	margin: 0;
+	font-size: 10px;
+	letter-spacing: 0.05em;
+}
+
+.composer-attach .topbar-control--enabled .topbar-toggle-row {
+	border: 0;
+	background: transparent;
+	padding: 4px 0;
+}
+
 .topbar-lang-label {
 	font-size: 9.5px;
 	font-weight: 600;
