@@ -36,6 +36,6 @@ Thumbs.db
 .cursor/
 
 # Editor (uncomment if you prefer not to commit personal workspace settings)
-# .vscode/*
-# !.vscode/extensions.json
-# !.vscode/settings.json.example
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
