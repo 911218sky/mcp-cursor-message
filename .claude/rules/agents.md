@@ -1,6 +1,6 @@
 # AI 代理／自動化協作指南
 
-本文件給 **AI 編碼代理**與 **自動化流程** 使用：如何在儲存庫內安全地修改、測試與回報，而不破壞擴充與 MCP 之間的契約。終端使用者請讀 [README.md](./README.md)；架構細節請讀 [PROJECT.md](./PROJECT.md)。
+本文件給 **AI 編碼代理**與 **自動化流程** 使用：如何在儲存庫內安全地修改、測試與回報，而不破壞擴充與 MCP 之間的契約。終端使用者請讀 [README.md](../../README.md)；架構細節請讀 [PROJECT.md](../../PROJECT.md)。
 
 ## Git 與使用者同意（強制）
 
@@ -11,7 +11,7 @@
 
 ## 指引原則
 
-1. **單一事實來源**：IPC 檔名、語意與 `MESSENGER_DATA_DIR` 行為以 [PROJECT.md](./PROJECT.md)（流程章節與「資料夾裡的檔案」速查表）與程式碼為準；修改時同步更新 **PROJECT.md** 與相關型別（`src/types/ipc-json.d.ts`、`mcp-server/index.ts`）。
+1. **單一事實來源**：IPC 檔名、語意與 `MESSENGER_DATA_DIR` 行為以 [PROJECT.md](../../PROJECT.md)（流程章節與「資料夾裡的檔案」速查表）與程式碼為準；修改時同步更新 **PROJECT.md** 與相關型別（`src/types/ipc-json.d.ts`、`mcp-server/index.ts`）。
 2. **小步提交**：優先最小可行 diff；避免與議題無關的重構、大規模格式化。
 3. **建置驗證**：變更後在儲存庫根目錄執行 `bun run compile`；若動到打包或 `package.json`，執行 `bun run package` 確認可產出 `.vsix`。
 
@@ -52,7 +52,7 @@
 
 ## 版本與發佈（Semantic Versioning）
 
-`package.json` 的 **`version`** 採 **SemVer `MAJOR.MINOR.PATCH`**（例：`9.0.0`）。發 GitHub Release／打 tag 前，**tag 名稱須與此版號一致**（例：`v9.0.1` 對應 `9.0.1`），見 [`.github/workflows/package.yml`](./.github/workflows/package.yml)。
+`package.json` 的 **`version`** 採 **SemVer `MAJOR.MINOR.PATCH`**（例：`9.0.0`）。發 GitHub Release／打 tag 前，**tag 名稱須與此版號一致**（例：`v9.0.1` 對應 `9.0.1`），見 [`.github/workflows/package.yml`](../../.github/workflows/package.yml)。
 
 | 位 | 何時遞增 | 範例 |
 |----|----------|------|
@@ -64,6 +64,6 @@
 
 ## 參考連結
 
-- [README.md](./README.md) — 安裝與使用
-- [PROJECT.md](./PROJECT.md) — 運作流程與 IPC 速查
-- [esbuild.config.mjs](./esbuild.config.mjs) — 建置進入點
+- [README.md](../../README.md) — 安裝與使用
+- [PROJECT.md](../../PROJECT.md) — 運作流程與 IPC 速查
+- [esbuild.config.mjs](../../esbuild.config.mjs) — 建置進入點
