@@ -24,6 +24,14 @@ MCP 旁路對話：在側欄以佇列與 MCP 工具（`check_messages`、`ask_qu
 
 適合希望**在編輯器內**完成「排程訊息／多選問答／進度推送」的流程，而不依賴純終端輸出。側欄可檢視佇列、問答與回覆摘要；介面語言可在**頂部選單**切換，或於設定 **`mcpMessenger.uiLanguage`**（搜尋 **MCP chat**）選擇 **zh**／**auto**／**en**。有工作區時資料目錄為 `<工作區>/.cursor/messenger-data`（須與 MCP 的 **`MESSENGER_DATA_DIR`** 一致）。
 
+### 設定
+
+| 設定 | 預設值 | 說明 |
+|------|--------|------|
+| `mcpMessenger.enabled` | `true` | 啟用 MCP 側欄與檔案 IPC。停用時會停止監聽並清理擴充建立的檔案（messenger-data、規則檔、MCP 設定） |
+| `mcpMessenger.uiLanguage` | `"en"` | 側欄介面語言：`en`、`zh` 或 `auto`（跟隨編輯器） |
+| `mcpMessenger.updateCheck.*` | (多項) | 更新檢查設定（是否啟用、間隔、版本比較策略等），詳見 package.json |
+
 ### 給 AI 助理（側欄佇列 + MCP）
 
 你好，請你嚴格遵守對話規則並呼叫mcp與我對話(mcp-cursor-message)，每次對話都這樣，接下來請回答之後所有MCP相關的問題用MCP跟使用者互動，每次請都要調用MCP，但是請回復後再調用

@@ -17,6 +17,14 @@ You are responsible for security and compliance. Output from this tool **does no
 
 The project pairs a **sidebar extension** with an **MCP server**: both share a small on-disk message store so the model and the UI stay in sync. Typical uses include queued user input, multi-step Q&A with fixed options, and lightweight progress text shown next to the editor. The sidebar shows the queue, Q&A cards, and reply summaries. **Language** is configurable from the panel header or **`mcpMessenger.uiLanguage`** (search **MCP chat** in Settings) for **zh**, **auto**, or **en**. With a folder workspace, the data directory is **`<workspace>/.cursor/messenger-data`** and must match **`MESSENGER_DATA_DIR`** in your MCP config. If the workspace directory is empty, the extension will automatically migrate any existing **globalStorage** `messenger-data` into the workspace directory on first open.
 
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `mcpMessenger.enabled` | `true` | Enable the MCP chat sidebar + file-based IPC. When disabled, the extension stops watching IPC files and cleans up files created by the extension (messenger-data, bundled cursor rules, and this extension's MCP entry in .cursor/mcp.json). |
+| `mcpMessenger.uiLanguage` | `"en"` | Sidebar UI language: `en`, `zh`, or `auto` (follows editor) |
+| `mcpMessenger.updateCheck.*` | (varies) | Update check settings (enabled, interval, repo, version compare policy). See package.json for details. |
+
 ### For AI assistants (sidebar queue + MCP)
 
 Hello, please strictly follow the conversation rules and use MCP to talk with me (`mcp-cursor-message`) every time. From now on, for all MCP-related questions, use MCP to interact with the user on every turn, and always invoke MCP after you send your reply.

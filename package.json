@@ -122,7 +122,7 @@
 						"off"
 					],
 					"default": "minor",
-					"description": "Update policy vs GitHub releases/latest (full SemVer for “is newer”): patch = background notify on any newer tag; minor = notify only on MINOR or MAJOR bump (skips patch-only); major = notify only on MAJOR bump; off = no checks. Manual \"Check for updates\" ignores patch/minor/major and always offers the latest if newer."
+					"description": "Update policy vs GitHub releases/latest (full SemVer for 'is newer'): patch = background notify on any newer tag; minor = notify only on MINOR or MAJOR bump (skips patch-only); major = notify only on MAJOR bump; off = no checks. Manual 'Check for updates' ignores patch/minor/major and always offers the latest if newer."
 				}
 			}
 		}

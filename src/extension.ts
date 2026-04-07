@@ -17,7 +17,6 @@ import {
 	unlinkReply,
 	writeAnswerFile,
 	writePanelHistory,
-	writeQueue,
 	normalizePanelHistory,
 } from "./ipc";
 import { installMcpServer, removeMcpServer } from "./mcp-config";
@@ -32,7 +31,6 @@ import {
 	resetTokenStats,
 	subtractTokensForQueueMessage,
 } from "./token-stats";
-import { runUpdateCheck, scheduleUpdateChecks } from "./update-check";
 
 /** 目前 IPC 根目錄（工作區或 globalStorage 下的 messenger-data）。 */
 let dataDir: string = "";
@@ -45,30 +43,27 @@ let debounceTimer: NodeJS.Timeout | undefined;
 /** `messenger-data/*.json` 變更後延遲推送側欄狀態（毫秒）。 */
 const PUSH_STATE_DEBOUNCE_MS = 100;
 
+/** 確保 workspace 內的規則檔存在：缺失時 AI 佇列串接可能無法接續。 */
+const MUST_CALL_CHECK_MESSAGES_RULE_MDC = `---
+alwaysApply: true
+---
+當使用者正在使用側邊欄佇列，且已載入 \`mcp-cursor-message\` MCP 伺服器時：
+
+- 在每一次助理回覆中，於結束對使用者的訊息之前，最後一個 MCP 工具呼叫必須是 \`mcp-cursor-message\` MCP 伺服器上的 \`check_messages\`。
+- 若 \`check_messages\` 回傳的系統訊息為「沒有新訊息 / 等待已被中斷 / 請再次呼叫」這類提示，請不要將該訊息輸出給使用者；而是要在同一次回覆流程中持續再次呼叫 \`check_messages\`，直到取得實際排隊中的訊息（或工具呼叫被強制終止）。
+- 如果可以，請透過工具的 \`reply\` 參數傳入已完成的回覆內容，以便擴充功能可以顯示／推送下一則訊息。
+- 你可以先呼叫其他 MCP 工具（例如 \`ask_question\`、\`send_progress\`），但在助理結束這次回覆之前，\`check_messages\` 仍然必須是最後一個 MCP 呼叫。
+- 當本輪任務會分成多個步驟（例如先分析、再實作、再驗證）時，建議在每個關鍵步驟完成後呼叫 \`send_progress\`，用簡短 Markdown 說明「已完成 / 目前狀態 / 下一步」。
+- 當你對使用者需求有多種合理解讀，或需要使用者在幾種策略之間做選擇時，請優先呼叫 \`ask_question\` 呈現 2–4 個具體選項，而不是自行假設。
+- 當遇到大型、含糊或有多種架構取捨的任務時，優先考慮切換到 Cursor 的「計畫模式（plan）」來先協助設計實作方案。
+- 需要切換到「計畫模式」時，先用一句話向使用者說明為何適合切換，並詢問是否要切換；只有在使用者同意後，才呼叫 \`SwitchMode\` 工具將模式切換為 \`plan\`。
+`;
+
 /** `panel.html` 原始模板（僅 nonce／URI 每輪替換），避免 `resolveWebviewView` 重入時重複讀檔。 */
 let cachedPanelHtmlTemplate: string | undefined;
 
 /** 供 `resolvePanelUiLocale` 讀取設定（啟用時赋值）。 */
 let extensionContext: vscode.ExtensionContext | undefined;
-
-/**
- * 是否已啟用主要功能（IPC/佇列/監聽/MCP auto-install）。
- * 這是「總開關」：停用時會停止 watcher 與 UI 寫入，並清理此擴充建立的檔案以避免殘留。
- */
-function isMessengerEnabled(): boolean {
-	return vscode.workspace
-		.getConfiguration("mcpMessenger")
-		.get<boolean>("enabled", true);
-}
-
-async function setMessengerEnabled(next: boolean): Promise<void> {
-	const target = vscode.workspace.workspaceFolders?.length
-		? vscode.ConfigurationTarget.Workspace
-		: vscode.ConfigurationTarget.Global;
-	await vscode.workspace
-		.getConfiguration("mcpMessenger")
-		.update("enabled", next, target);
-}
 
 /** 讀取 `mcpMessenger.uiLanguage` 原始值（供 Webview 語言選單同步）。 */
 function getUiLanguageSetting(): "en" | "zh" | "auto" {
@@ -105,73 +100,27 @@ function messengerDataDirForContext(context: vscode.ExtensionContext): string {
 	return path.join(context.globalStorageUri.fsPath, "messenger-data");
 }
 
-/** 擴充套件內建、可自動補進工作區 `.cursor/rules/` 的規則檔（已存在則不覆寫）。 */
-const BUNDLED_CURSOR_RULE_FILES = [
-	"must-call-check-messages.mdc",
-	"three-phase-workflow.mdc",
-] as const;
-
 /**
- * 若工作區缺少內建規則檔，則在啟用/切換工作區時各補一份（已存在則不覆寫）。
- * 於 `activate` 與 `rebindMessengerDataDir` 呼叫，確保初始化當下即補齊。
- * 來源順序：`工作區/src/rules` → `extensionPath/src/rules` → `extensionPath/.cursor/rules`（VSIX 內由 compile 自 src 同步）。
- * `must-call-check-messages.mdc`：側欄佇列與 `check_messages` 串接。
- * `three-phase-workflow.mdc`：分析→方案→實作之三階段工作流。
+ * 若工作區沒有 `./.cursor/rules/must-call-check-messages.mdc`，則在啟用/切換工作區時自動補齊一份。
+ * 目的：避免使用者的環境缺失此規則後，側欄佇列串接行為中斷。
  */
-async function ensureBundledCursorRules(
+async function ensureMustCallCheckMessagesRuleMdc(
 	context: vscode.ExtensionContext
 ): Promise<void> {
 	const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 	if (!wf) return;
 
-	const rulesDir = path.join(wf, ".cursor", "rules");
-	for (const name of BUNDLED_CURSOR_RULE_FILES) {
-		const dest = path.join(rulesDir, name);
-		try {
-			await fs.stat(dest);
-			continue;
-		} catch {
-			// missing → 依序從工作區 src、擴充套件 bundle 補上
-		}
-
-		const body = readBundledCursorRuleSync(
-			wf,
-			context.extensionPath,
-			name
-		);
-		if (body === undefined) {
-			console.error(
-				"[mcp-cursor-message] 找不到擴充套件內建規則檔：",
-				name
-			);
-			continue;
-		}
-
-		await fs.mkdir(rulesDir, { recursive: true });
-		await fs.writeFile(dest, body, "utf-8");
+	// 規則檔固定放在：工作區 `.cursor/rules/must-call-check-messages.mdc`
+	const dest = path.join(wf, ".cursor", "rules", "must-call-check-messages.mdc");
+	try {
+		await fs.stat(dest);
+		return; // 已存在就不覆寫（避免干擾使用者自訂規則）
+	} catch {
+		// ignore
 	}
-}
 
-/**
- * 讀取要寫入工作區 `.cursor/rules/` 的規則內文（不覆寫已存在的目標檔，僅供缺失時）。
- */
-function readBundledCursorRuleSync(
-	workspaceRoot: string,
-	extensionPath: string,
-	name: string
-): string | undefined {
-	const tryRead = (abs: string): string | undefined => {
-		try {
-			return readFileSync(abs, "utf-8");
-		} catch {
-			return undefined;
-		}
-	};
-	return (
-		tryRead(path.join(workspaceRoot, "src", "rules", name)) ??
-		tryRead(path.join(extensionPath, "src", "rules", name)) ??
-		tryRead(path.join(extensionPath, ".cursor", "rules", name))
-	);
+	await fs.mkdir(path.dirname(dest), { recursive: true });
+	await fs.writeFile(dest, MUST_CALL_CHECK_MESSAGES_RULE_MDC, "utf-8");
 }
 
 /**
@@ -232,22 +181,29 @@ async function rebindMessengerDataDir(context: vscode.ExtensionContext): Promise
 	const next = messengerDataDirForContext(context);
 	if (next === dataDir) return;
 	dataDir = next;
-	if (isMessengerEnabled()) {
-		await ensureBundledCursorRules(context);
+
+	// 檢查是否啟用自動設定
+	const config = vscode.workspace.getConfiguration("mcpMessenger");
+	const autoSetup = config.get<boolean>("autoSetup", true);
+
+	if (autoSetup) {
+		await ensureMustCallCheckMessagesRuleMdc(context);
 		// 若首次進入某工作區且其 messenger-data 為空，先嘗試搬移 globalStorage 的過往內容。
 		await migrateGlobalMessengerDataToWorkspaceIfEmpty(context, dataDir);
-		// 新路徑首次寫入前先建立目錄。
-		void ensureDataDir(dataDir);
 	}
+	// 新路徑首次寫入前先建立目錄。
+	void ensureDataDir(dataDir);
 	// 舊路徑的 watcher 先釋放，避免監聽錯目錄。
 	fileWatcherStop?.();
 	fileWatcherStop = undefined;
 	// 改監聽新 `dataDir` 底下 `*.json`。
-	if (isMessengerEnabled()) startDataDirWatcher();
+	startDataDirWatcher();
 	// 側欄改讀新路徑的 queue／question／reply。
 	schedulePushState();
 	// 若有工作區，對齊 `.cursor/mcp.json` 與 `MESSENGER_DATA_DIR`。
-	if (isMessengerEnabled()) void autoInstallMcpIfWorkspace(context);
+	if (autoSetup) {
+		void autoInstallMcpIfWorkspace(context);
+	}
 }
 
 /**
@@ -267,12 +223,17 @@ function autoInstallMcpIfWorkspace(context: vscode.ExtensionContext): void {
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	extensionContext = context;
 	dataDir = messengerDataDirForContext(context);
-	if (isMessengerEnabled()) {
-		await ensureBundledCursorRules(context);
+
+	// 檢查是否啟用自動設定
+	const config = vscode.workspace.getConfiguration("mcpMessenger");
+	const autoSetup = config.get<boolean>("autoSetup", true);
+
+	if (autoSetup) {
+		await ensureMustCallCheckMessagesRuleMdc(context);
 		// 首次打開工作區時：把 globalStorage 內的過往資料遷移到 workspace 目錄，避免「找不到可複製過去內容」。
 		await migrateGlobalMessengerDataToWorkspaceIfEmpty(context, dataDir);
-		await ensureDataDir(dataDir);
 	}
+	await ensureDataDir(dataDir);
 
 	// `getDataDir` 用函式而非固定字串：切換工作區時只改模組變數 `dataDir`，provider 永遠讀到最新路徑。
 	const provider = new MessengerViewProvider(context.extensionUri, () => dataDir);
@@ -284,18 +245,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			// 本擴充 webview 未註冊 Service Worker；若遇到上游 Chromium／嵌入環境的 SW 異常，可改為 false。
 			{ webviewOptions: { retainContextWhenHidden: true } }
 		)
-	);
-
-	// 命令：啟用/停用（停用時清理外掛建立的檔案/設定）。
-	context.subscriptions.push(
-		vscode.commands.registerCommand("mcpMessenger.enable", async () => {
-			await setMessengerEnabled(true);
-		})
-	);
-	context.subscriptions.push(
-		vscode.commands.registerCommand("mcpMessenger.disable", async () => {
-			await setMessengerEnabled(false);
-		})
 	);
 
 	// 命令：手動寫入工作區 `.cursor/mcp.json` + 註冊 MCP，並指向 `.cursor/messenger-data`。
@@ -337,19 +286,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		})
 	);
 
-	// 命令：檢查 GitHub Releases 是否有新版（下載 VSIX 後嘗試觸發安裝）。
-	context.subscriptions.push(
-		vscode.commands.registerCommand("mcpMessenger.checkForUpdates", async () => {
-			try {
-				await runUpdateCheck(context, { force: true });
-			} catch {
-				// ignore
-			}
-		})
-	);
-
 	// 監聽佇列／問答等 JSON，變更時防抖後推狀態至 Webview。
-	if (isMessengerEnabled()) startDataDirWatcher();
+	startDataDirWatcher();
 
 	// 新增／移除／切換工作區資料夾時改 `dataDir`、重建 watcher、必要時靜默寫 MCP。
 	context.subscriptions.push(
@@ -364,20 +302,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			if (e.affectsConfiguration("mcpMessenger.uiLanguage")) {
 				schedulePushState();
 			}
-			if (e.affectsConfiguration("mcpMessenger.enabled")) {
-				void applyEnabledSetting(context);
-			}
 		})
 	);
 
 	// 有工作區時靜默寫入 MCP 條目（與命令 Install MCP configuration 相同）；失敗只打 log。
-	if (isMessengerEnabled()) void autoInstallMcpIfWorkspace(context);
-
-	// 定期檢查 GitHub Releases：若有新版則提供下載並嘗試觸發安裝。
-	scheduleUpdateChecks(context);
-
-	// 初次啟動時套用 enabled 狀態（避免設定關閉但仍殘留 watcher/檔案）。
-	await applyEnabledSetting(context);
+	if (autoSetup) {
+		void autoInstallMcpIfWorkspace(context);
+	}
 }
 
 /** 監聽 `messenger-data/*.json` 變化，防抖後推送最新佇列／問答／摘要至側欄。 */
@@ -410,20 +341,6 @@ function startDataDirWatcher(): void {
 /** 從 IPC 讀取問答與佇列，以 `postMessage({ type: 'state' })` 同步至 Webview。 */
 async function pushStateToPanel(): Promise<void> {
 	if (!panelView) return;
-	if (!isMessengerEnabled()) {
-		const msg: ExtensionPanelStateMessage = {
-			type: "state",
-			uiLocale: resolvePanelUiLocale(),
-			uiLanguageSetting: getUiLanguageSetting(),
-			enabled: false,
-			question: null,
-			reply: null,
-			queue: [],
-			history: [],
-		};
-		void panelView.webview.postMessage(msg);
-		return;
-	}
 	const question = await readQuestion(dataDir);
 	const reply = await readReply(dataDir);
 	const queue = await readQueue(dataDir);
@@ -433,9 +350,8 @@ async function pushStateToPanel(): Promise<void> {
 		type: "state",
 		uiLocale: resolvePanelUiLocale(),
 		uiLanguageSetting: getUiLanguageSetting(),
-		enabled: true,
 		question,
-		reply: reply ? { content: reply.content, kind: reply.kind } : null,
+		reply: reply ? { content: reply.content } : null,
 		queue,
 		history,
 		tokenStats,
@@ -490,79 +406,6 @@ function deactivateExtension(): void {
 	panelView = undefined;
 }
 
-let applyingEnabledSetting = false;
-async function applyEnabledSetting(context: vscode.ExtensionContext): Promise<void> {
-	if (applyingEnabledSetting) return;
-	applyingEnabledSetting = true;
-	try {
-		const enabled = isMessengerEnabled();
-		if (enabled) {
-			await ensureBundledCursorRules(context);
-			await ensureDataDir(dataDir);
-			startDataDirWatcher();
-			void autoInstallMcpIfWorkspace(context);
-			schedulePushState();
-			return;
-		}
-
-		// disabled: stop watcher first, then cleanup, then push empty state.
-		// Cleanup makes disabling reversible and avoids “mystery files” left in .cursor/.
-		fileWatcherStop?.();
-		fileWatcherStop = undefined;
-		await cleanupWorkspaceArtifacts(dataDir);
-		schedulePushState();
-	} finally {
-		applyingEnabledSetting = false;
-	}
-}
-
-async function cleanupWorkspaceArtifacts(dir: string): Promise<void> {
-	// 1) messenger-data IPC files + paste/
-	await purgeMessengerDataDir(dir);
-
-	// 2) bundled cursor rules (workspace only)
-	const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (root) {
-		const rulesDir = path.join(root, ".cursor", "rules");
-		for (const name of BUNDLED_CURSOR_RULE_FILES) {
-			try {
-				await fs.unlink(path.join(rulesDir, name));
-			} catch {
-				// ignore
-			}
-		}
-		// 3) remove MCP server entry
-		try {
-			await removeMcpServer(root);
-		} catch {
-			// ignore
-		}
-	}
-}
-
-async function purgeMessengerDataDir(dir: string): Promise<void> {
-	const files = [
-		"queue.json",
-		"question.json",
-		"answer.json",
-		"reply.json",
-		"history.json",
-		"token-stats.json",
-	];
-	for (const f of files) {
-		try {
-			await fs.unlink(path.join(dir, f));
-		} catch {
-			// ignore
-		}
-	}
-	try {
-		await fs.rm(path.join(dir, "paste"), { recursive: true, force: true });
-	} catch {
-		// ignore
-	}
-}
-
 /** VS Code 擴充停用時呼叫。 */
 export function deactivate(): void {
 	extensionContext = undefined;
@@ -574,8 +417,8 @@ export function deactivate(): void {
  * `viewType` 須與 package.json `contributes.views` 的 id 一致。
  */
 class MessengerViewProvider implements vscode.WebviewViewProvider {
-	/** 與 package.json 中 `mcp-cursor-message` 相同，註冊 provider 時使用。 */
-	static readonly viewType = "mcp-cursor-message";
+	/** 與 package.json 中 `mcpMessenger.mainView` 相同，註冊 provider 時使用。 */
+	static readonly viewType = "mcpMessenger.mainView";
 
 	constructor(
 		/** 擴充套件根目錄，用於載入 dist／media。 */
@@ -624,14 +467,6 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 		// 網頁端 vscode.postMessage({ type, ... }) → 此處對應寫入佇列／答案檔等。
 		webviewView.webview.onDidReceiveMessage(async (raw: unknown) => {
 			const msg = raw as WebviewHostMessage;
-			if (
-				!isMessengerEnabled() &&
-				msg.type !== "ready" &&
-				msg.type !== "setUiLanguage" &&
-				msg.type !== "setEnabled"
-			) {
-				return;
-			}
 			const dir = this.getDataDir();
 			try {
 				switch (msg.type) {
@@ -657,10 +492,6 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 									vscode.ConfigurationTarget.Global
 								);
 						}
-						break;
-					}
-					case "setEnabled": {
-						await setMessengerEnabled(Boolean(msg.value));
 						break;
 					}
 					// 送出文字
@@ -739,27 +570,6 @@ class MessengerViewProvider implements vscode.WebviewViewProvider {
 							await unlinkPasteImageIfManaged(dir, removed);
 							await subtractTokensForQueueMessage(dir, removed);
 						}
-						await pushStateToPanel();
-						break;
-					}
-					// 佇列中尚未被取出的項目可編輯（文字內容／圖片 caption）。
-					case "updateQueueItem": {
-						const index = Number(msg.index);
-						if (!Number.isInteger(index) || index < 0) break;
-						const q = await readQueue(dir);
-						if (index >= q.length) break;
-						const target = q[index];
-						if (!target) break;
-						if (target.type === "text") {
-							const nextText = String(msg.content ?? "").trim();
-							if (!nextText) break;
-							target.content = nextText;
-						} else if (target.type === "image") {
-							target.caption = String(msg.caption ?? "").trim();
-						} else {
-							break;
-						}
-						await writeQueue(dir, q);
 						await pushStateToPanel();
 						break;
 					}
